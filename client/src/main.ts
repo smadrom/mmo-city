@@ -31,6 +31,12 @@ async function start(role: string): Promise<void> {
   }
   joinScreen.style.display = 'none';
   document.getElementById('hud')!.classList.remove('hidden');
+  // первый ROOM_STATE приходит отдельным сообщением после join, и в нём
+  // serverTime ещё 0 (тики его обновят) — ждём живое значение, иначе
+  // поля state undefined (падение в Avatars) и съезжают таймеры баннеров
+  while (!room.state.serverTime) {
+    await new Promise<void>((resolve) => room.onStateChange.once(() => resolve()));
+  }
   bootGame(room);
 }
 

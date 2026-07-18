@@ -12,7 +12,7 @@ export const CAR_ACCEL = 12;
 export const CAR_BRAKE = 25;
 export const CAR_DRAG = 6;
 export const CAR_TURN_RATE = 1.8;
-export const CAR_ENTER_DIST = 3;
+export const CAR_ENTER_DIST = 6;
 export const CAR_PARK_RETURN_MS = 5 * 60_000;
 
 export const PUNCH_RANGE = 2;

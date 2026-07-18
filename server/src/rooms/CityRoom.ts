@@ -47,14 +47,20 @@ export class CityRoom extends Room<GameState> {
       this.state.apartments.set(door.id, a);
     }
 
-    this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_RATE);
+    this.setSimulationInterval((dtMs) => {
+      try {
+        this.tick(dtMs / 1000);
+      } catch (err) {
+        console.error('[city] tick error', err);
+      }
+    }, 1000 / TICK_RATE);
 
     this.onMessage('input', (client, data) => {
       const rt = this.runtimes.get(client.sessionId);
       if (!rt) return;
       rt.input = {
-        up: !!data.up, down: !!data.down, left: !!data.left, right: !!data.right,
-        sprint: !!data.sprint, rotY: Number(data.rotY) || 0,
+        up: !!data?.up, down: !!data?.down, left: !!data?.left, right: !!data?.right,
+        sprint: !!data?.sprint, rotY: Number(data?.rotY) || 0,
       };
     });
     this.onMessage('attack', (client) => {

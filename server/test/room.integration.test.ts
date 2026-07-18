@@ -37,6 +37,14 @@ describe('CityRoom (integration)', () => {
     expect(after).toBeLessThan(before);
   });
 
+  it('битое input-сообщение не роняет комнату', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const client = await testServer.connectTo(room, { name: 'int3', role: 'citizen' });
+    client.send('input');
+    await new Promise(r => setTimeout(r, 200));
+    expect(room.state.players.has(client.sessionId)).toBe(true);
+  });
+
   it('лимит копов: 21-й коп становится гражданином', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     const clients = [];

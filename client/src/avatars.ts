@@ -7,8 +7,32 @@ interface PlayerMesh {
   marker: THREE.Mesh;
 }
 
-function makePlayerMesh(): PlayerMesh {
+function makeNameLabel(name: string, role: string): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 96;
+  const ctx = canvas.getContext('2d')!;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const roleRu = role === 'cop' ? 'Полицейский' : 'Гражданин';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.fillRect(3, 6, 250, 84);
+  ctx.font = 'bold 32px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(name, 128, 32, 236);
+  ctx.font = '26px sans-serif';
+  ctx.fillStyle = role === 'cop' ? '#77aaff' : '#bbbbbb';
+  ctx.fillText(roleRu, 128, 68, 236);
+  const texture = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
+  sprite.scale.set(2.5, 0.94, 1);
+  sprite.position.y = 2.55;
+  return sprite;
+}
+
+function makePlayerMesh(name: string, role: string): PlayerMesh {
   const group = new THREE.Group();
+  group.add(makeNameLabel(name, role));
   const body = new THREE.Mesh(
     new THREE.CapsuleGeometry(0.4, 1.0, 4, 8),
     new THREE.MeshLambertMaterial({ color: 0x888888 }),
@@ -67,8 +91,8 @@ export class Avatars {
     // colyseus.js 0.16: колбеки состояния регистрируются через getStateCallbacks
     const $ = getStateCallbacks(room);
 
-    $(room.state).players.onAdd((_p: any, id: string) => {
-      const mesh = makePlayerMesh();
+    $(room.state).players.onAdd((p: any, id: string) => {
+      const mesh = makePlayerMesh(p.name ?? 'игрок', p.role ?? 'citizen');
       this.players.set(id, mesh);
       scene.add(mesh.group);
     });

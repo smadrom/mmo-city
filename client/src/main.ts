@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { connect } from './net.js';
+import { Avatars } from './avatars.js';
+import { InputController } from './input.js';
+import { updateCamera } from './camera.js';
 import type { Room } from 'colyseus.js';
-import type { CityMap } from '@mmo/shared';
 
 const joinScreen = document.getElementById('join')!;
 const nameInput = document.getElementById('nameInput') as HTMLInputElement;
@@ -38,7 +40,11 @@ function bootGame(room: Room): void {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-  const map: CityMap = buildWorld(scene);
+  const map = buildWorld(scene);
+  const avatars = new Avatars(scene, room);
+  const input = new InputController(room, renderer.domElement);
+  // const ui = new UI(room, map, avatars); // задача 15
+  void map;
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -46,19 +52,11 @@ function bootGame(room: Room): void {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  // avatars, input, ui подключаются в задачах 14–15:
-  // const avatars = new Avatars(scene, room);
-  // const input = new InputController(room, renderer.domElement);
-  // const ui = new UI(room, map);
-  void map;
-
-  const me = () => room.state.players.get(room.sessionId) as any;
+  const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
-    const p = me();
-    if (p) {
-      camera.position.set(p.x, 30, p.z + 25);
-      camera.lookAt(p.x, 0, p.z);
-    }
+    const dt = clock.getDelta();
+    avatars.update(dt);
+    updateCamera(camera, room, input.yaw);
     renderer.render(scene, camera);
   });
 }

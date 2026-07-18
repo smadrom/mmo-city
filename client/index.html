@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MMO City</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="join">
+    <h1>MMO City</h1>
+    <input id="nameInput" maxlength="16" placeholder="Ник" />
+    <div class="roles">
+      <button id="joinCitizen">Гражданин</button>
+      <button id="joinCop">Полицейский</button>
+    </div>
+    <div id="joinError"></div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div id="stats"></div>
+    <div id="banner" class="hidden"></div>
+    <div id="prompt"></div>
+    <div id="safeDialog" class="hidden">
+      <div>Сейф</div>
+      <button id="dep100">+100</button>
+      <button id="depAll">Всё</button>
+      <button id="wd100">−100</button>
+      <button id="wdAll">Снять всё</button>
+      <button id="safeClose">Закрыть</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

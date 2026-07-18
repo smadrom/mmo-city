@@ -26,7 +26,7 @@ export interface CityMap {
 
 export function createCityMap(): CityMap {
   const buildings: BuildingDef[] = [];
-  const special: Record<string, BuildingDef['kind']> = {
+  const special: Record<string, 'hospital' | 'police' | 'warehouse'> = {
     '0,0': 'hospital',
     '3,0': 'police',
     '0,3': 'warehouse',

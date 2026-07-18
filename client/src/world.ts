@@ -20,6 +20,11 @@ export function buildWorld(scene: THREE.Scene): CityMap {
   scene.add(ground);
 
   const roadMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+  const sidewalkMat = new THREE.MeshLambertMaterial({ color: 0x999999 });
+  const lineMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const SIDEWALK_WIDTH = 3;
+  const DASH_LENGTH = 3;
+  const DASH_STEP = 6;
   for (const at of ROADS) {
     for (const vertical of [true, false]) {
       const geo = new THREE.PlaneGeometry(
@@ -30,6 +35,29 @@ export function buildWorld(scene: THREE.Scene): CityMap {
       road.rotation.x = -Math.PI / 2;
       road.position.set(vertical ? at : 0, 0.01, vertical ? 0 : at);
       scene.add(road);
+
+      for (const side of [-1, 1]) {
+        const off = side * (ROAD_WIDTH / 2 + SIDEWALK_WIDTH / 2);
+        const sidewalk = new THREE.Mesh(
+          new THREE.PlaneGeometry(
+            vertical ? SIDEWALK_WIDTH : MAP_HALF * 2,
+            vertical ? MAP_HALF * 2 : SIDEWALK_WIDTH,
+          ),
+          sidewalkMat,
+        );
+        sidewalk.rotation.x = -Math.PI / 2;
+        sidewalk.position.set(vertical ? at + off : 0, 0.02, vertical ? 0 : at + off);
+        scene.add(sidewalk);
+      }
+
+      for (let d = -MAP_HALF + DASH_STEP; d <= MAP_HALF - DASH_STEP; d += DASH_STEP) {
+        const dash = new THREE.Mesh(
+          new THREE.BoxGeometry(vertical ? 0.4 : DASH_LENGTH, 0.02, vertical ? DASH_LENGTH : 0.4),
+          lineMat,
+        );
+        dash.position.set(vertical ? at : d, 0.03, vertical ? d : at);
+        scene.add(dash);
+      }
     }
   }
 

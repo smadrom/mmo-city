@@ -8,16 +8,21 @@ const joinScreen = document.getElementById('join')!;
 const nameInput = document.getElementById('nameInput') as HTMLInputElement;
 const joinError = document.getElementById('joinError')!;
 
+let connecting = false;
+
 async function start(role: string): Promise<void> {
   const name = nameInput.value.trim();
   if (!name) {
     joinError.textContent = 'Введи ник';
     return;
   }
+  if (connecting) return;
+  connecting = true;
   let room: Room;
   try {
     room = await connect(name, role);
   } catch {
+    connecting = false;
     joinError.textContent = 'Не удалось подключиться (сервер полон или недоступен)';
     return;
   }

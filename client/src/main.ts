@@ -4,6 +4,7 @@ import { connect } from './net.js';
 import { Avatars } from './avatars.js';
 import { InputController } from './input.js';
 import { updateCamera } from './camera.js';
+import { UI } from './ui.js';
 import type { Room } from 'colyseus.js';
 
 const joinScreen = document.getElementById('join')!;
@@ -43,8 +44,7 @@ function bootGame(room: Room): void {
   const map = buildWorld(scene);
   const avatars = new Avatars(scene, room);
   const input = new InputController(room, renderer.domElement);
-  // const ui = new UI(room, map, avatars); // задача 15
-  void map;
+  const ui = new UI(room, map, avatars);
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -57,6 +57,7 @@ function bootGame(room: Room): void {
     const dt = clock.getDelta();
     avatars.update(dt);
     updateCamera(camera, room, input.yaw);
+    ui.update();
     renderer.render(scene, camera);
   });
 }

@@ -24,6 +24,10 @@ export function tryRent(
   if (apt.rentedBy) return 'taken';
   if (p.cash < RENT_PRICE) return 'no_money';
   p.cash -= RENT_PRICE;
+  if (p.apt) {
+    const old = state.apartments.get(p.apt);
+    if (old) old.rentedBy = '';
+  }
   apt.rentedBy = p.name;
   p.apt = apt.id;
   const rt = runtimes.get(playerId);

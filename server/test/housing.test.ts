@@ -48,6 +48,23 @@ describe('аренда и сейф', () => {
     expect(tryRent(state, runtimes, 's1', 1000)).toBe('no_money');
   });
 
+  it('пересъём освобождает предыдущую квартиру', () => {
+    const { state, p, apt, runtimes } = setup();
+    const apt2 = new Apartment();
+    apt2.id = 'apt1';
+    apt2.doorX = 20; apt2.doorZ = 20;
+    state.apartments.set('apt1', apt2);
+    expect(tryRent(state, runtimes, 's1', 1000)).toBe('ok');
+    expect(p.apt).toBe('apt0');
+    // игрок подходит к другой свободной двери и арендует её
+    p.x = 20; p.z = 21;
+    expect(tryRent(state, runtimes, 's1', 2000)).toBe('ok');
+    expect(apt.rentedBy).toBe('');
+    expect(apt2.rentedBy).toBe('tenant');
+    expect(p.apt).toBe('apt1');
+    expect(p.cash).toBe(500 - RENT_PRICE * 2);
+  });
+
   it('депозит и снятие у своей двери с лимитом сейфа', () => {
     const { state, p } = setup();
     p.apt = 'apt0';

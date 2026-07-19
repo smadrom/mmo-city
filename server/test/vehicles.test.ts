@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { GameState, Player, Car } from '../src/schema/GameState.js';
 import { makeRuntime, type Runtime } from '../src/runtime.js';
 import { tickVehicles, tryEnterCar, tryExitCar, type CarRuntime } from '../src/systems/vehicles.js';
-import { CAR_ACCEL, CAR_MAX_SPEED, CAR_PARK_RETURN_MS, type ParkingSpot } from '@mmo/shared';
+import { CAR_ACCEL, CAR_MAX_SPEED, CAR_REVERSE_SPEED, CAR_PARK_RETURN_MS, type ParkingSpot } from '@mmo/shared';
 
 function setup() {
   const state = new GameState();
@@ -59,6 +59,26 @@ describe('машины', () => {
     for (let i = 0; i < 200; i++) tickVehicles(state, runtimes, carRuntime, [wall], 0.05, i * 50, spots);
     expect(car.z).toBeGreaterThan(-10);
     expect(car.speed).toBe(0);
+  });
+
+  it('задний ход: скорость отрицательная, упирается в -CAR_REVERSE_SPEED, машина едет назад', () => {
+    const { state, car, runtimes, carRuntime, spots } = setup();
+    tryEnterCar(state, 's1');
+    runtimes.get('s1')!.input.down = true;
+    for (let i = 0; i < 100; i++) tickVehicles(state, runtimes, carRuntime, [], 0.05, i * 50, spots);
+    expect(car.speed).toBe(-CAR_REVERSE_SPEED);
+    expect(car.z).toBeGreaterThan(0); // едет в +z (назад) при rotY=0
+  });
+
+  it('тормоз при движении вперёд не уводит в реверс сразу', () => {
+    const { state, car, runtimes, carRuntime, spots } = setup();
+    tryEnterCar(state, 's1');
+    runtimes.get('s1')!.input.up = true;
+    for (let i = 0; i < 20; i++) tickVehicles(state, runtimes, carRuntime, [], 0.05, i * 50, spots);
+    runtimes.get('s1')!.input.up = false;
+    runtimes.get('s1')!.input.down = true;
+    tickVehicles(state, runtimes, carRuntime, [], 0.05, 2000, spots);
+    expect(car.speed).toBeGreaterThan(0); // ещё тормозит, не реверс
   });
 
   it('выход из машины: игрок рядом, машина свободна', () => {

@@ -8,6 +8,7 @@ export const PLAYER_SPRINT = 8;
 
 export const CAR_RADIUS = 1.5;
 export const CAR_MAX_SPEED = 20;
+export const CAR_REVERSE_SPEED = 6;
 export const CAR_ACCEL = 12;
 export const CAR_BRAKE = 25;
 export const CAR_DRAG = 6;

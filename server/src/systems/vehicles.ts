@@ -1,5 +1,5 @@
 import {
-  CAR_RADIUS, CAR_MAX_SPEED, CAR_ACCEL, CAR_BRAKE, CAR_DRAG, CAR_TURN_RATE,
+  CAR_RADIUS, CAR_MAX_SPEED, CAR_REVERSE_SPEED, CAR_ACCEL, CAR_BRAKE, CAR_DRAG, CAR_TURN_RATE,
   CAR_ENTER_DIST, CAR_PARK_RETURN_MS, MAP_HALF,
   collidesAny, clamp, dist2, type AABB, type ParkingSpot,
 } from '@mmo/shared';
@@ -32,14 +32,18 @@ export function tickVehicles(
       }
       const inp = rt.input;
       if (inp.up) car.speed = Math.min(CAR_MAX_SPEED, car.speed + CAR_ACCEL * dt);
-      else if (inp.down) car.speed = Math.max(0, car.speed - CAR_BRAKE * dt);
-      else car.speed = Math.max(0, car.speed - CAR_DRAG * dt);
+      else if (inp.down) {
+        car.speed = car.speed > 0
+          ? Math.max(0, car.speed - CAR_BRAKE * dt)
+          : Math.max(-CAR_REVERSE_SPEED, car.speed - CAR_ACCEL * dt);
+      } else if (car.speed > 0) car.speed = Math.max(0, car.speed - CAR_DRAG * dt);
+      else if (car.speed < 0) car.speed = Math.min(0, car.speed + CAR_DRAG * dt);
 
       const steer = (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
-      const agility = Math.min(1, car.speed / 3) * (1 - 0.6 * (car.speed / CAR_MAX_SPEED));
-      car.rotY += steer * CAR_TURN_RATE * agility * dt;
+      const agility = Math.min(1, Math.abs(car.speed) / 3) * (1 - 0.6 * (Math.abs(car.speed) / CAR_MAX_SPEED));
+      car.rotY += steer * CAR_TURN_RATE * agility * Math.sign(car.speed) * dt;
 
-      if (car.speed > 0) {
+      if (car.speed !== 0) {
         const nx = clamp(car.x - Math.sin(car.rotY) * car.speed * dt, -MAP_HALF + CAR_RADIUS, MAP_HALF - CAR_RADIUS);
         const nz = clamp(car.z - Math.cos(car.rotY) * car.speed * dt, -MAP_HALF + CAR_RADIUS, MAP_HALF - CAR_RADIUS);
         if (collidesAny(nx, nz, CAR_RADIUS, colliders)) {

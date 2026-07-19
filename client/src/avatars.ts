@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WEAPONS, type WeaponKind } from '@mmo/shared';
 import { getStateCallbacks, type Room } from 'colyseus.js';
 
 interface PlayerMesh {
@@ -6,6 +7,7 @@ interface PlayerMesh {
   body: THREE.Mesh;
   head: THREE.Mesh;
   marker: THREE.Mesh;
+  gun: THREE.Mesh;
 }
 
 // интерполяция: рендерим чужих с задержкой INTERP_DELAY_MS по буферу снапшотов
@@ -89,7 +91,14 @@ function makePlayerMesh(name: string, role: string): PlayerMesh {
   marker.position.y = 2.8;
   marker.visible = false;
   group.add(marker);
-  return { group, body, head, marker };
+  const gun = new THREE.Mesh(
+    new THREE.BoxGeometry(0.12, 0.12, 0.7),
+    new THREE.MeshLambertMaterial({ color: 0x222222 }),
+  );
+  gun.position.set(0.45, 1.2, -0.35);
+  gun.visible = false;
+  group.add(gun);
+  return { group, body, head, marker, gun };
 }
 
 function makeCarMesh(): THREE.Group {
@@ -195,6 +204,8 @@ export class Avatars {
       const onFoot = p.mode !== 'car';
       mesh.body.visible = onFoot;
       mesh.head.visible = onFoot;
+      const w = p.weapon && p.weapon in WEAPONS ? WEAPONS[p.weapon as WeaponKind] : null;
+      mesh.gun.visible = onFoot && w?.ranged === true;
     });
 
     this.cars.forEach((mesh, id) => {

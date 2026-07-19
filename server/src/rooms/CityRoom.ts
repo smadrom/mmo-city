@@ -64,7 +64,7 @@ export class CityRoom extends Room<GameState> {
       };
     });
     this.onMessage('attack', (client) => {
-      handleAttack(this.state, this.runtimes, client.sessionId, Date.now());
+      handleAttack(this.state, this.runtimes, client.sessionId, Date.now(), this.colliders);
     });
     this.onMessage('interact', (client) => this.handleInteract(client));
     this.onMessage('deposit', (client, data) => {

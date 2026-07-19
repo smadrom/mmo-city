@@ -1,26 +1,42 @@
 import {
   PUNCH_RANGE, PUNCH_DAMAGE, PUNCH_COOLDOWN_MS, MAX_HP,
   DEATH_CASH_LOSS, WANTED_DURATION_MS, RESPAWN_DELAY_MS,
-  dist2, type CityMap, type Point,
+  WEAPONS, segmentHitsAABB, dist2,
+  type AABB, type CityMap, type Point, type WeaponKind,
 } from '@mmo/shared';
 import type { GameState } from '../schema/GameState.js';
 import type { Runtime } from '../runtime.js';
+
+export interface Shot {
+  from: Point;
+  to: Point;
+  hit: boolean;
+  victim: string; // sessionId цели, '' при промахе
+}
 
 export function handleAttack(
   state: GameState,
   runtimes: Map<string, Runtime>,
   attackerId: string,
   now: number,
-): void {
+  colliders: AABB[],
+): Shot | null {
   const a = state.players.get(attackerId);
   const art = runtimes.get(attackerId);
-  if (!a || !art || a.mode !== 'foot') return;
-  if (now - art.lastAttackAt < PUNCH_COOLDOWN_MS) return;
+  if (!a || !art || a.mode !== 'foot') return null;
+  const w = a.weapon && Object.hasOwn(WEAPONS, a.weapon) ? WEAPONS[a.weapon as WeaponKind] : null;
+  const ranged = w?.ranged === true;
+  const range = w ? w.range : PUNCH_RANGE;
+  const damage = w ? w.damage : PUNCH_DAMAGE;
+  const cooldownMs = w ? w.cooldownMs : PUNCH_COOLDOWN_MS;
+  if (now - art.lastAttackAt < cooldownMs) return null;
+  if (ranged && a.ammo <= 0) return null;
 
   const fx = -Math.sin(a.rotY);
   const fz = -Math.cos(a.rotY);
+  const minDot = ranged ? 0.98 : 0.3;
   let bestId = '';
-  let bestD = PUNCH_RANGE * PUNCH_RANGE;
+  let bestD = range * range;
   state.players.forEach((t, id) => {
     if (id === attackerId) return;
     if (t.mode === 'jail' || t.mode === 'dead') return;
@@ -28,19 +44,34 @@ export function handleAttack(
     if (d2 > bestD || d2 === 0) return;
     const len = Math.sqrt(d2);
     const dot = ((t.x - a.x) / len) * fx + ((t.z - a.z) / len) * fz;
-    if (dot < 0.3) return;
+    if (dot < minDot) return;
+    if (ranged && colliders.some(b => segmentHitsAABB(a.x, a.z, t.x, t.z, b))) return;
     bestId = id;
     bestD = d2;
   });
   art.lastAttackAt = now;
-  if (!bestId) return;
 
+  if (ranged) {
+    a.ammo -= 1;
+    if (!bestId) {
+      return { from: { x: a.x, z: a.z }, to: { x: a.x + fx * range, z: a.z + fz * range }, hit: false, victim: '' };
+    }
+    const victim = state.players.get(bestId)!;
+    victim.hp -= damage;
+    const vrt = runtimes.get(bestId);
+    if (vrt) vrt.lastDamageAt = now;
+    if (victim.hp <= 0) killPlayer(state, runtimes, attackerId, bestId, now);
+    return { from: { x: a.x, z: a.z }, to: { x: victim.x, z: victim.z }, hit: true, victim: bestId };
+  }
+
+  if (!bestId) return null;
   const victim = state.players.get(bestId);
   const vrt = runtimes.get(bestId);
-  if (!victim || !vrt) return;
-  victim.hp -= PUNCH_DAMAGE;
+  if (!victim || !vrt) return null;
+  victim.hp -= damage;
   vrt.lastDamageAt = now;
   if (victim.hp <= 0) killPlayer(state, runtimes, attackerId, bestId, now);
+  return null;
 }
 
 export function killPlayer(

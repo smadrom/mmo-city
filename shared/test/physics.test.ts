@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { collidesCircleAABB, moveCircle, clamp, dist2 } from '../src/physics.js';
+import { collidesCircleAABB, moveCircle, clamp, dist2, segmentHitsAABB } from '../src/physics.js';
 
 const wall = { x: 10, z: 0, w: 2, d: 10 }; // стена x: 9..11, z: -5..5
 
@@ -35,5 +35,24 @@ describe('clamp / dist2', () => {
   });
   it('dist2 считает квадрат расстояния', () => {
     expect(dist2(0, 0, 3, 4)).toBe(25);
+  });
+});
+
+describe('segmentHitsAABB', () => {
+  // wall = { x: 10, z: 0, w: 2, d: 10 } → x: 9..11, z: -5..5 (уже объявлен в файле)
+  it('отрезок через стену пересекает её', () => {
+    expect(segmentHitsAABB(0, 0, 20, 0, wall)).toBe(true);
+  });
+  it('касание грани считается пересечением', () => {
+    expect(segmentHitsAABB(0, 0, 9, 0, wall)).toBe(true);
+  });
+  it('отрезок мимо стены не пересекает', () => {
+    expect(segmentHitsAABB(0, 10, 20, 10, wall)).toBe(false);
+  });
+  it('отрезок, заканчивающийся перед стеной, не пересекает', () => {
+    expect(segmentHitsAABB(0, 0, 8, 0, wall)).toBe(false);
+  });
+  it('отрезок внутри стены пересекает', () => {
+    expect(segmentHitsAABB(9.5, 0, 10.5, 0, wall)).toBe(true);
   });
 });

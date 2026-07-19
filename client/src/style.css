@@ -28,9 +28,17 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
   color: #fff; font-size: 18px; background: rgba(0,0,0,.5);
   padding: 6px 16px; border-radius: 6px;
 }
-#safeDialog {
+#safeDialog, #shopDialog {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
   background: rgba(20,20,40,.95); color: #fff; padding: 20px;
   border-radius: 8px; display: flex; flex-direction: column; gap: 8px;
   pointer-events: auto;
+}
+
+#shopItems { display: flex; flex-direction: column; gap: 6px; }
+.shopRow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+#toast {
+  position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%);
+  color: #fff; font-size: 16px; background: rgba(0,0,0,.7);
+  padding: 8px 18px; border-radius: 6px;
 }

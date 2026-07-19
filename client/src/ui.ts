@@ -1,6 +1,7 @@
 import {
   DOOR_DIST, CAR_ENTER_DIST, DELIVERY_PICKUP_DIST, RENT_PRICE,
-  dist2, type CityMap,
+  WEAPONS, AMMO_PACK_PRICE, AMMO_PACK_SIZE,
+  dist2, type CityMap, type WeaponKind,
 } from '@mmo/shared';
 import type { Room } from 'colyseus.js';
 import type { Avatars } from './avatars.js';
@@ -10,6 +11,9 @@ export class UI {
   private banner = document.getElementById('banner')!;
   private prompt = document.getElementById('prompt')!;
   private safeDialog = document.getElementById('safeDialog')!;
+  private shopDialog = document.getElementById('shopDialog')!;
+  private toast = document.getElementById('toast')!;
+  private toastTimer = 0;
 
   constructor(private room: Room, private map: CityMap, private avatars: Avatars) {
     room.onMessage('openSafe', () => this.safeDialog.classList.remove('hidden'));
@@ -27,10 +31,43 @@ export class UI {
     // кнопка сохраняет фокус после клика — снимаем его, чтобы Space/Enter
     // не повторяли последнее действие (в диалоге нет текстовых полей)
     this.safeDialog.addEventListener('click', (e) => (e.target as HTMLElement).blur());
+
+    room.onMessage('openShop', () => this.shopDialog.classList.remove('hidden'));
+    room.onMessage('shopResult', (msg: any) => {
+      const texts: Record<string, string> = {
+        ok: 'Куплено', too_far: 'Подойди ближе к магазину',
+        no_money: 'Не хватает денег', bad_kind: 'Нет такого оружия',
+      };
+      this.showToast(texts[msg.reason] ?? 'Ошибка покупки');
+    });
+    const items = document.getElementById('shopItems')!;
+    for (const kind of Object.keys(WEAPONS) as WeaponKind[]) {
+      const w = WEAPONS[kind];
+      const row = document.createElement('div');
+      row.className = 'shopRow';
+      const label = document.createElement('span');
+      label.textContent = `${w.name} — урон ${w.damage}, дальность ${w.range} м`;
+      const btn = document.createElement('button');
+      btn.textContent = `${w.price}$`;
+      btn.addEventListener('click', () => room.send('buyWeapon', { kind }));
+      row.append(label, btn);
+      items.append(row);
+    }
+    document.getElementById('buyAmmoBtn')!.textContent = `Патроны +${AMMO_PACK_SIZE} (${AMMO_PACK_PRICE}$)`;
+    document.getElementById('buyAmmoBtn')!.addEventListener('click', () => room.send('buyAmmo'));
+    document.getElementById('shopClose')!.addEventListener('click', () => this.shopDialog.classList.add('hidden'));
+    this.shopDialog.addEventListener('click', (e) => (e.target as HTMLElement).blur());
   }
 
   private me(): any {
     return (this.room.state.players as any).get(this.room.sessionId);
+  }
+
+  private showToast(text: string): void {
+    this.toast.textContent = text;
+    this.toast.classList.remove('hidden');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = window.setTimeout(() => this.toast.classList.add('hidden'), 2000);
   }
 
   update(): void {
@@ -39,9 +76,12 @@ export class UI {
     const nowServer = this.avatars.serverNow();
 
     const roleRu = me.role === 'cop' ? 'Полицейский' : 'Гражданин';
+    const w = me.weapon && me.weapon in WEAPONS ? WEAPONS[me.weapon as WeaponKind] : null;
+    const weaponLine = `Оружие: ${w ? w.name : 'Кулаки'}${w?.ranged ? ` · ${me.ammo}` : ''}`;
     this.stats.textContent =
       `HP: ${Math.ceil(me.hp)}  |  Наличные: ${me.cash}$  |  Сейф: ${me.safe}$\n` +
-      `${roleRu}${me.apt ? `  |  Квартира: ${me.apt}` : ''}`;
+      `${roleRu}${me.apt ? `  |  Квартира: ${me.apt}` : ''}\n` +
+      weaponLine;
 
     // Баннеры
     let bannerText = '';
@@ -68,6 +108,10 @@ export class UI {
       return 'E — выйти из машины';
     }
     if (me.mode !== 'foot') return '';
+
+    if (dist2(me.x, me.z, this.map.gunShop.x, this.map.gunShop.z) < DOOR_DIST * DOOR_DIST) {
+      return 'E — оружейный магазин';
+    }
 
     for (const [, apt] of (this.room.state.apartments as any)) {
       if (dist2(me.x, me.z, apt.doorX, apt.doorZ) < DOOR_DIST * DOOR_DIST) {

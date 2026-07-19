@@ -86,6 +86,7 @@ export function buildWorld(scene: THREE.Scene): CityMap {
     scene.add(m);
   };
   mark(map.warehouse, 0xff8800);
+  mark(map.gunShop, 0xcc44ff);
   for (const t of map.deliveryTargets) mark(t, 0x00cccc);
   mark(map.hospitalDoor, 0xffffff, 2);
   mark(map.policeDoor, 0x2244ff, 2);

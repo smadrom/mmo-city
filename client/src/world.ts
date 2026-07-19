@@ -1,5 +1,30 @@
 import * as THREE from 'three';
-import { createCityMap, ROADS, ROAD_WIDTH, MAP_HALF, type CityMap, type Point } from '@mmo/shared';
+import { createCityMap, ROADS, ROAD_WIDTH, MAP_HALF, type CityMap, type Point, type BuildingDef } from '@mmo/shared';
+
+const KIND_LABELS: Record<BuildingDef['kind'], string> = {
+  hospital: 'Больница',
+  police: 'Полиция',
+  warehouse: 'Склад',
+  house: 'Жилой дом',
+};
+
+function makeTextSprite(text: string): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.fillRect(0, 14, 512, 100);
+  ctx.font = 'bold 56px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, 256, 64, 480);
+  const texture = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
+  sprite.scale.set(10, 2.5, 1);
+  return sprite;
+}
 
 export function buildWorld(scene: THREE.Scene): CityMap {
   const map = createCityMap();
@@ -68,6 +93,9 @@ export function buildWorld(scene: THREE.Scene): CityMap {
     );
     mesh.position.set(b.x, b.h / 2, b.z);
     scene.add(mesh);
+    const label = makeTextSprite(KIND_LABELS[b.kind]);
+    label.position.set(b.x, b.h + 3, b.z);
+    scene.add(label);
   }
 
   const doorMat = new THREE.MeshLambertMaterial({ color: 0xffcc00 });
@@ -90,6 +118,15 @@ export function buildWorld(scene: THREE.Scene): CityMap {
   for (const t of map.deliveryTargets) mark(t, 0x00cccc);
   mark(map.hospitalDoor, 0xffffff, 2);
   mark(map.policeDoor, 0x2244ff, 2);
+
+  const poi = (p: Point, text: string) => {
+    const label = makeTextSprite(text);
+    label.position.set(p.x, 6, p.z);
+    scene.add(label);
+  };
+  poi(map.gunShop, 'Оружейный магазин');
+  const TARGET_LABELS: Record<string, string> = { shop: 'Магазин', gas: 'Заправка', port: 'Порт' };
+  for (const t of map.deliveryTargets) poi(t, TARGET_LABELS[t.id] ?? t.id);
 
   return map;
 }

@@ -23,6 +23,8 @@ describe('Player schema', () => {
     expect(p.cargo).toBe(false);
     expect(p.deliveryTarget).toBe('');
     expect(p.deliveryDeadline).toBe(0);
+    expect(p.weapon).toBe('');
+    expect(p.ammo).toBe(0);
   });
 });
 

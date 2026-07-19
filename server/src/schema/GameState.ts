@@ -19,6 +19,8 @@ export class Player extends Schema {
   @type('boolean') cargo = false;
   @type('string') deliveryTarget = '';
   @type('number') deliveryDeadline = 0;
+  @type('string') weapon = ''; // '' = кулаки
+  @type('number') ammo = 0;
 }
 
 export class Car extends Schema {

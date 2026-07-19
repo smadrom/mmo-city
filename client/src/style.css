@@ -52,7 +52,9 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
   position: absolute; bottom: 130px; left: 10px; width: 340px;
   max-height: 130px; overflow-y: auto; color: #fff; font-size: 14px;
   background: rgba(0,0,0,.45); padding: 6px 10px; border-radius: 6px;
+  pointer-events: auto;
 }
+#chat:empty { display: none; }
 #chat div { margin: 2px 0; overflow-wrap: break-word; }
 #chatInput {
   position: absolute; bottom: 94px; left: 10px; width: 340px;

@@ -88,10 +88,11 @@ export class UI {
   }
 
   private appendChat(msg: { from: string; text: string }): void {
+    const atBottom = this.chat.scrollTop + this.chat.clientHeight >= this.chat.scrollHeight - 10;
     const div = document.createElement('div');
     div.textContent = `${msg.from}: ${msg.text}`; // textContent — без XSS
     this.chat.append(div);
-    this.chat.scrollTop = this.chat.scrollHeight;
+    if (atBottom) this.chat.scrollTop = this.chat.scrollHeight;
   }
 
   private closeChat(): void {

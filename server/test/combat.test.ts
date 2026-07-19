@@ -139,15 +139,17 @@ describe('бой', () => {
     expect(v.hp).toBe(MAX_HP);
   });
 
-  it('стена блокирует выстрел (LOS)', () => {
+  it('стена блокирует выстрел (LOS), tracer обрезается у стены', () => {
     const { state, a, v, runtimes } = setup();
     a.weapon = 'pistol';
     a.ammo = 5;
     v.z = -20;
-    const wall = [{ x: 0, z: -10, w: 4, d: 2 }];
+    const wall = [{ x: 0, z: -10, w: 4, d: 2 }]; // ближняя грань z=-9
     const shot = handleAttack(state, runtimes, 'a', 1000, wall);
     expect(v.hp).toBe(MAX_HP);
     expect(shot?.hit).toBe(false);
+    expect(shot?.to.x).toBeCloseTo(0, 10);
+    expect(shot?.to.z).toBeCloseTo(-9, 10); // не сквозь стену на -40
   });
 
   it('водитель машины — легальная цель (машина не укрытие)', () => {

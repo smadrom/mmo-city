@@ -1,7 +1,7 @@
 import {
   PUNCH_RANGE, PUNCH_DAMAGE, PUNCH_COOLDOWN_MS, MAX_HP,
   DEATH_CASH_LOSS, WANTED_DURATION_MS, RESPAWN_DELAY_MS,
-  WEAPONS, segmentHitsAABB, dist2,
+  WEAPONS, segmentHitsAABB, segmentAABBEnterT, dist2,
   type AABB, type CityMap, type Point, type WeaponKind,
 } from '@mmo/shared';
 import type { GameState } from '../schema/GameState.js';
@@ -54,7 +54,13 @@ export function handleAttack(
   if (ranged) {
     a.ammo -= 1;
     if (!bestId) {
-      return { from: { x: a.x, z: a.z }, to: { x: a.x + fx * range, z: a.z + fz * range }, hit: false, victim: '' };
+      // tracer обрезаем у ближайшей стены — луч не рисуется сквозь здания
+      let tWall = 1;
+      for (const b of colliders) {
+        const t = segmentAABBEnterT(a.x, a.z, a.x + fx * range, a.z + fz * range, b);
+        if (t !== null && t < tWall) tWall = t;
+      }
+      return { from: { x: a.x, z: a.z }, to: { x: a.x + fx * range * tWall, z: a.z + fz * range * tWall }, hit: false, victim: '' };
     }
     const victim = state.players.get(bestId)!;
     victim.hp -= damage;

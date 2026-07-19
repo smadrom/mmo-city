@@ -81,6 +81,18 @@ describe('машины', () => {
     expect(car.speed).toBeGreaterThan(0); // ещё тормозит, не реверс
   });
 
+  it('при реверсе руль инвертируется: left уводит rotY в минус', () => {
+    const { state, car, runtimes, carRuntime, spots } = setup();
+    tryEnterCar(state, 's1');
+    runtimes.get('s1')!.input.down = true;
+    for (let i = 0; i < 50; i++) tickVehicles(state, runtimes, carRuntime, [], 0.05, i * 50, spots);
+    expect(car.speed).toBeLessThan(0);
+    runtimes.get('s1')!.input.down = false;
+    runtimes.get('s1')!.input.left = true;
+    tickVehicles(state, runtimes, carRuntime, [], 0.05, 5000, spots);
+    expect(car.rotY).toBeLessThan(0); // вперёд с left rotY рос бы в плюс
+  });
+
   it('выход из машины: игрок рядом, машина свободна', () => {
     const { state, p, car } = setup();
     tryEnterCar(state, 's1');

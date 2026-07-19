@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { collidesCircleAABB, moveCircle, clamp, dist2, segmentHitsAABB } from '../src/physics.js';
+import { collidesCircleAABB, moveCircle, clamp, dist2, segmentHitsAABB, segmentAABBEnterT } from '../src/physics.js';
 
 const wall = { x: 10, z: 0, w: 2, d: 10 }; // стена x: 9..11, z: -5..5
 
@@ -54,5 +54,22 @@ describe('segmentHitsAABB', () => {
   });
   it('отрезок внутри стены пересекает', () => {
     expect(segmentHitsAABB(9.5, 0, 10.5, 0, wall)).toBe(true);
+  });
+});
+
+describe('segmentAABBEnterT', () => {
+  // wall = { x: 10, z: 0, w: 2, d: 10 } → x: 9..11, z: -5..5
+  it('возвращает t входа в стену', () => {
+    expect(segmentAABBEnterT(0, 0, 20, 0, wall)).toBeCloseTo(0.45, 10); // x=9 при t=9/20
+  });
+  it('null при промахе', () => {
+    expect(segmentAABBEnterT(0, 10, 20, 10, wall)).toBeNull();
+  });
+  it('0, если начало внутри стены', () => {
+    expect(segmentAABBEnterT(9.5, 0, 30, 0, wall)).toBe(0);
+  });
+  it('при диагонали вход определяется более поздней гранью', () => {
+    // отрезок (0,-10)→(20,0): x-грань при t=0.45, z-грань (z=-5) при t=0.5 → вход t=0.5 (точка (10,-5))
+    expect(segmentAABBEnterT(0, -10, 20, 0, wall)).toBeCloseTo(0.5, 10);
   });
 });

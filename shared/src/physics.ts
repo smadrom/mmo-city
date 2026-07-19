@@ -34,12 +34,17 @@ export function dist2(ax: number, az: number, bx: number, bz: number): number {
 
 // 2D-пересечение отрезка с AABB (slab-метод). Касание грани = пересечение.
 export function segmentHitsAABB(x1: number, z1: number, x2: number, z2: number, b: AABB): boolean {
+  return segmentAABBEnterT(x1, z1, x2, z2, b) !== null;
+}
+
+// Параметр t∈[0,1] входа отрезка в AABB (для обрезки луча у стены); null — нет пересечения.
+export function segmentAABBEnterT(x1: number, z1: number, x2: number, z2: number, b: AABB): number | null {
   const minX = b.x - b.w / 2, maxX = b.x + b.w / 2;
   const minZ = b.z - b.d / 2, maxZ = b.z + b.d / 2;
   let tmin = 0, tmax = 1;
   for (const [p, d, lo, hi] of [[x1, x2 - x1, minX, maxX], [z1, z2 - z1, minZ, maxZ]] as const) {
     if (d === 0) {
-      if (p < lo || p > hi) return false;
+      if (p < lo || p > hi) return null;
       continue;
     }
     let t1 = (lo - p) / d;
@@ -47,7 +52,7 @@ export function segmentHitsAABB(x1: number, z1: number, x2: number, z2: number, 
     if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
     tmin = Math.max(tmin, t1);
     tmax = Math.min(tmax, t2);
-    if (tmin > tmax) return false;
+    if (tmin > tmax) return null;
   }
-  return true;
+  return tmin;
 }

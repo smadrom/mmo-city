@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { collidesCircleAABB, moveCircle, clamp, dist2, segmentHitsAABB, segmentAABBEnterT } from '../src/physics.js';
+import { collidesCircleAABB, moveCircle, clamp, dist2, segmentHitsAABB, segmentAABBEnterT, stepFoot } from '../src/physics.js';
+import { PLAYER_SPEED, PLAYER_SPRINT, PLAYER_RADIUS, MAP_HALF } from '../src/config.js';
 
 const wall = { x: 10, z: 0, w: 2, d: 10 }; // стена x: 9..11, z: -5..5
 
@@ -71,5 +72,42 @@ describe('segmentAABBEnterT', () => {
   it('при диагонали вход определяется более поздней гранью', () => {
     // отрезок (0,-10)→(20,0): x-грань при t=0.45, z-грань (z=-5) при t=0.5 → вход t=0.5 (точка (10,-5))
     expect(segmentAABBEnterT(0, -10, 20, 0, wall)).toBeCloseTo(0.5, 10);
+  });
+});
+
+describe('stepFoot', () => {
+  const noKeys = { up: false, down: false, left: false, right: false, sprint: false, rotY: 0 };
+  const dt = 0.05; // тик 20 Гц
+
+  it('без ввода стоит на месте', () => {
+    expect(stepFoot(3, 4, noKeys, dt, [])).toEqual({ x: 3, z: 4 });
+  });
+
+  it('up при rotY=0 двигает в -z со скоростью PLAYER_SPEED', () => {
+    const r = stepFoot(0, 0, { ...noKeys, up: true }, dt, []);
+    expect(r.x).toBeCloseTo(0, 10);
+    expect(r.z).toBeCloseTo(-PLAYER_SPEED * dt, 10);
+  });
+
+  it('sprint даёт PLAYER_SPRINT', () => {
+    const r = stepFoot(0, 0, { ...noKeys, up: true, sprint: true }, dt, []);
+    expect(r.z).toBeCloseTo(-PLAYER_SPRINT * dt, 10);
+  });
+
+  it('диагональ нормирована: не быстрее прямой', () => {
+    const r = stepFoot(0, 0, { ...noKeys, up: true, right: true }, dt, []);
+    expect(Math.hypot(r.x, r.z)).toBeCloseTo(PLAYER_SPEED * dt, 10);
+  });
+
+  it('стена блокирует движение', () => {
+    // wall x: 9..11, z: -5..5; бежим в +x (right при rotY=0).
+    // Шаг 0.25 м: с x=8.4 целевая 8.65 уже в радиусе 0.5 от грани x=9 → блок.
+    const r = stepFoot(8.4, 0, { ...noKeys, right: true }, dt, [wall]);
+    expect(r.x).toBe(8.4); // x не сдвинулся — упёрся
+  });
+
+  it('клэмпит у границы мира', () => {
+    const r = stepFoot(-MAP_HALF + PLAYER_RADIUS - 0.01, 0, { ...noKeys, left: true }, dt, []);
+    expect(r.x).toBeGreaterThanOrEqual(-MAP_HALF + PLAYER_RADIUS);
   });
 });

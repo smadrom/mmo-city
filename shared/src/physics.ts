@@ -1,3 +1,5 @@
+import { MAP_HALF, PLAYER_RADIUS, PLAYER_SPEED, PLAYER_SPRINT } from './config.js';
+
 export interface AABB { x: number; z: number; w: number; d: number; }
 
 export function collidesCircleAABB(x: number, z: number, r: number, b: AABB): boolean {
@@ -24,6 +26,33 @@ export function moveCircle(
 
 export function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+export interface MoveInput {
+  up: boolean; down: boolean; left: boolean; right: boolean; sprint: boolean; rotY: number;
+}
+
+// Один шаг пешего движения — общий для сервера (тик) и клиента (предсказание),
+// чтобы математика не расходилась. Без ввода возвращает позицию без изменений.
+export function stepFoot(
+  x: number, z: number, inp: MoveInput, dt: number, colliders: AABB[],
+): { x: number; z: number } {
+  const mf = (inp.up ? 1 : 0) - (inp.down ? 1 : 0);
+  const mr = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+  if (mf === 0 && mr === 0) return { x, z };
+  const fx = -Math.sin(inp.rotY);
+  const fz = -Math.cos(inp.rotY);
+  const rx = Math.cos(inp.rotY);
+  const rz = -Math.sin(inp.rotY);
+  const mx = fx * mf + rx * mr;
+  const mz = fz * mf + rz * mr;
+  const len = Math.hypot(mx, mz);
+  const speed = (inp.sprint ? PLAYER_SPRINT : PLAYER_SPEED) * dt / len;
+  const res = moveCircle(x, z, mx * speed, mz * speed, PLAYER_RADIUS, colliders);
+  return {
+    x: clamp(res.x, -MAP_HALF + PLAYER_RADIUS, MAP_HALF - PLAYER_RADIUS),
+    z: clamp(res.z, -MAP_HALF + PLAYER_RADIUS, MAP_HALF - PLAYER_RADIUS),
+  };
 }
 
 export function dist2(ax: number, az: number, bx: number, bz: number): number {

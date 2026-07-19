@@ -76,7 +76,7 @@ export class UI {
     const nowServer = this.avatars.serverNow();
 
     const roleRu = me.role === 'cop' ? 'Полицейский' : 'Гражданин';
-    const w = me.weapon && me.weapon in WEAPONS ? WEAPONS[me.weapon as WeaponKind] : null;
+    const w = me.weapon && Object.hasOwn(WEAPONS, me.weapon) ? WEAPONS[me.weapon as WeaponKind] : null;
     const weaponLine = `Оружие: ${w ? w.name : 'Кулаки'}${w?.ranged ? ` · ${me.ammo}` : ''}`;
     this.stats.textContent =
       `HP: ${Math.ceil(me.hp)}  |  Наличные: ${me.cash}$  |  Сейф: ${me.safe}$\n` +

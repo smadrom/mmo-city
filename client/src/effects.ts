@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import type { Room } from 'colyseus.js';
+import { dist2 } from '@mmo/shared';
 
 const TRACER_MS = 80;
 const VIGNETTE_MS = 150;
+const SHOT_SOUND_DIST = 60; // дальше этого радиуса щелчок не играем
 
 interface Tracer { line: THREE.Line; bornAt: number }
 
@@ -12,7 +14,7 @@ export class Effects {
   private vignetteTimer = 0;
   private audio: AudioContext | null = null;
 
-  constructor(private scene: THREE.Scene, room: Room) {
+  constructor(private scene: THREE.Scene, private room: Room) {
     room.onMessage('shot', (msg: any) => this.onShot(room.sessionId, msg));
   }
 
@@ -29,7 +31,8 @@ export class Effects {
       clearTimeout(this.vignetteTimer);
       this.vignetteTimer = window.setTimeout(() => this.vignette.classList.add('hidden'), VIGNETTE_MS);
     }
-    this.click();
+    const me = (this.room.state.players as any).get(myId);
+    if (!me || dist2(msg.from.x, msg.from.z, me.x, me.z) <= SHOT_SOUND_DIST * SHOT_SOUND_DIST) this.click();
   }
 
   // опциональный щелчок без ассетов (спека 5)

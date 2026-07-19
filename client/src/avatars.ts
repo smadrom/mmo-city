@@ -39,7 +39,8 @@ function sampleSnap(buf: Snap[], rt: number): Snap | null {
     const a = buf[i - 1];
     const b = buf[i];
     if (a.t <= rt) {
-      const alpha = (rt - a.t) / (b.t - a.t);
+      const d = b.t - a.t;
+      const alpha = d > 0 ? (rt - a.t) / d : 1; // равные t — берём более свежий снап, без 0/0
       return { t: rt, x: a.x + (b.x - a.x) * alpha, z: a.z + (b.z - a.z) * alpha, rotY: lerpAngle(a.rotY, b.rotY, alpha) };
     }
   }
@@ -204,7 +205,7 @@ export class Avatars {
       const onFoot = p.mode !== 'car';
       mesh.body.visible = onFoot;
       mesh.head.visible = onFoot;
-      const w = p.weapon && p.weapon in WEAPONS ? WEAPONS[p.weapon as WeaponKind] : null;
+      const w = p.weapon && Object.hasOwn(WEAPONS, p.weapon) ? WEAPONS[p.weapon as WeaponKind] : null;
       mesh.gun.visible = onFoot && w?.ranged === true;
     });
 

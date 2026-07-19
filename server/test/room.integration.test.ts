@@ -178,4 +178,22 @@ describe('CityRoom (integration)', () => {
     expect(got).toHaveLength(2); // «первое» эхом отправителю + слушателю
     expect(got[0].text).toBe('первое');
   });
+
+  it('чат: буфер истории держит последние 20 (21-е вытесняет первое)', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'hist1', role: 'citizen' });
+    c1.onMessage('chat', () => {}); // гасим warning о неподписанном типе
+    for (let i = 1; i <= 21; i++) {
+      (room as any).runtimes.get(c1.sessionId).lastChatAt = -10_000; // обход антиспама ради скорости теста
+      c1.send('chat', { text: `msg${i}` });
+      await new Promise(r => setTimeout(r, 30));
+    }
+    let history: any = null;
+    c1.onMessage('chatHistory', (m) => { history = m; });
+    c1.send('chatHistoryReq');
+    await new Promise(r => setTimeout(r, 200));
+    expect(history.items).toHaveLength(20);
+    expect(history.items[0].text).toBe('msg2');
+    expect(history.items[19].text).toBe('msg21');
+  });
 });

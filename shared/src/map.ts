@@ -22,6 +22,7 @@ export interface CityMap {
   policeDoor: Point;
   jailCell: Point;
   warehouse: Point;
+  gunShop: Point;
 }
 
 export function createCityMap(): CityMap {
@@ -83,5 +84,6 @@ export function createCityMap(): CityMap {
     policeDoor: { x: 150, z: -133 },
     jailCell: { x: 150, z: -172 },
     warehouse: { x: -150, z: 127 },
+    gunShop: { x: 30, z: -50 }, // квартал (2,1), западная стена дома у дороги x=0
   };
 }

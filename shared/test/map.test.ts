@@ -31,7 +31,7 @@ describe('createCityMap', () => {
   });
 
   it('точки доставки и ключевые места не внутри зданий', () => {
-    const pts = [...map.deliveryTargets, map.hospitalDoor, map.policeDoor, map.jailCell, map.warehouse];
+    const pts = [...map.deliveryTargets, map.hospitalDoor, map.policeDoor, map.jailCell, map.warehouse, map.gunShop];
     for (const p of pts) {
       for (const b of map.buildings) {
         expect(collidesCircleAABB(p.x, p.z, 1, b)).toBe(false);

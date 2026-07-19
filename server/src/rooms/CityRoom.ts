@@ -143,7 +143,7 @@ export class CityRoom extends Room<GameState> {
     const rt = this.runtimes.get(id);
     if (!p || !rt) return;
     try {
-      this.db.save({ name: p.name, cash: p.cash, safe: p.safe, apt: p.apt, kills: rt.kills, deaths: rt.deaths });
+      this.db.save({ name: p.name, cash: p.cash, safe: p.safe, apt: p.apt, kills: rt.kills, deaths: rt.deaths, weapon: p.weapon, ammo: p.ammo });
     } catch (err) {
       console.error('[city] db save error', err);
     }

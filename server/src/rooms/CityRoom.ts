@@ -1,6 +1,6 @@
 import { Room, type Client } from 'colyseus';
 import {
-  TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST,
+  TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY,
   createCityMap, dist2, type AABB, type CityMap,
 } from '@mmo/shared';
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
@@ -13,6 +13,7 @@ import { tickPolice } from '../systems/police.js';
 import { tryStartDelivery, tickDelivery } from '../systems/economy.js';
 import { tryRent, adjustSafe, tickRent } from '../systems/housing.js';
 import { tryBuyWeapon, tryBuyAmmo } from '../systems/shop.js';
+import { tryChat, type ChatMessage } from '../systems/chat.js';
 
 const SAVE_INTERVAL_MS = 5000;
 
@@ -25,6 +26,7 @@ export class CityRoom extends Room<GameState> {
   private runtimes = new Map<string, Runtime>();
   private carRuntime = new Map<string, CarRuntime>();
   private lastSaveAt = 0;
+  private chatLog: ChatMessage[] = [];
 
   onCreate(): void {
     this.map = createCityMap();
@@ -82,6 +84,16 @@ export class CityRoom extends Room<GameState> {
     });
     this.onMessage('withdraw', (client, data) => {
       adjustSafe(this.state, client.sessionId, -Math.abs(Number(data?.amount) || 0));
+    });
+    this.onMessage('chat', (client, data) => {
+      const msg = tryChat(this.state, this.runtimes, client.sessionId, data?.text, Date.now());
+      if (!msg) return;
+      this.chatLog.push(msg);
+      if (this.chatLog.length > CHAT_HISTORY) this.chatLog.shift();
+      this.broadcast('chat', msg);
+    });
+    this.onMessage('chatHistoryReq', (client) => {
+      client.send('chatHistory', { items: this.chatLog });
     });
   }
 

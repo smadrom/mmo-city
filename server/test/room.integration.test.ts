@@ -134,4 +134,48 @@ describe('CityRoom (integration)', () => {
     expect(shot?.hit).toBe(true);
     expect(shot?.victim).toBe(victim.sessionId);
   });
+
+  it('чат: сообщение доставляется другим игрокам (и отправителю-эхом)', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'chatter1', role: 'citizen' });
+    const c2 = await testServer.connectTo(room, { name: 'chatter2', role: 'citizen' });
+    const got: any[] = [];
+    c1.onMessage('chat', (m) => got.push(m)); // эхо отправителю
+    c2.onMessage('chat', (m) => got.push(m));
+    c1.send('chat', { text: 'привет, город' });
+    await new Promise(r => setTimeout(r, 200));
+    expect(got).toHaveLength(2);
+    expect(got[0].from).toBe('chatter1');
+    expect(got[0].text).toBe('привет, город');
+  });
+
+  it('чат: история по запросу chatHistoryReq', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'old1', role: 'citizen' });
+    c1.onMessage('chat', () => {}); // гасим warning о неподписанном сообщении
+    c1.send('chat', { text: 'раннее сообщение' });
+    await new Promise(r => setTimeout(r, 200));
+    const c2 = await testServer.connectTo(room, { name: 'newbie1', role: 'citizen' });
+    let history: any = null;
+    c2.onMessage('chatHistory', (msg) => { history = msg; });
+    c2.send('chatHistoryReq');
+    await new Promise(r => setTimeout(r, 200));
+    expect(history.items).toHaveLength(1);
+    expect(history.items[0].text).toBe('раннее сообщение');
+  });
+
+  it('чат: антиспам и пустое сообщение молча отсекаются', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'spammer', role: 'citizen' });
+    const c2 = await testServer.connectTo(room, { name: 'listener', role: 'citizen' });
+    const got: any[] = [];
+    c1.onMessage('chat', (m) => got.push(m));
+    c2.onMessage('chat', (m) => got.push(m));
+    c1.send('chat', { text: '   ' });      // пустое после trim
+    c1.send('chat', { text: 'первое' });   // проходит
+    c1.send('chat', { text: 'второе' });   // в пределах cooldown — режется
+    await new Promise(r => setTimeout(r, 300));
+    expect(got).toHaveLength(2); // «первое» эхом отправителю + слушателю
+    expect(got[0].text).toBe('первое');
+  });
 });

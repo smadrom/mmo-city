@@ -56,4 +56,8 @@ export const RENT_INTERVAL_MS = 60 * 60_000;
 export const SAFE_LIMIT = 5000;
 export const DOOR_DIST = 3;
 
+export const CHAT_MAX_LEN = 120;
+export const CHAT_COOLDOWN_MS = 1500;
+export const CHAT_HISTORY = 20;
+
 export const MAX_PLAYERS = 100;

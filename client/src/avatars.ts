@@ -4,7 +4,44 @@ import { getStateCallbacks, type Room } from 'colyseus.js';
 interface PlayerMesh {
   group: THREE.Group;
   body: THREE.Mesh;
+  head: THREE.Mesh;
   marker: THREE.Mesh;
+}
+
+// интерполяция: рендерим чужих с задержкой INTERP_DELAY_MS по буферу снапшотов
+const INTERP_DELAY_MS = 120;
+const SNAP_BUFFER_MS = 1000;
+
+interface Snap { t: number; x: number; z: number; rotY: number }
+
+function lerpAngle(a: number, b: number, alpha: number): number {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * alpha;
+}
+
+function pushSnap(buf: Snap[], t: number, x: number, z: number, rotY: number): void {
+  const last = buf[buf.length - 1];
+  if (last && last.x === x && last.z === z && last.rotY === rotY) return;
+  buf.push({ t, x, z, rotY });
+  while (buf.length > 2 && buf[0].t < t - SNAP_BUFFER_MS) buf.shift();
+}
+
+function sampleSnap(buf: Snap[], rt: number): Snap | null {
+  if (buf.length === 0) return null;
+  if (rt <= buf[0].t) return buf[0];
+  const last = buf[buf.length - 1];
+  if (rt >= last.t) return last;
+  for (let i = buf.length - 1; i > 0; i--) {
+    const a = buf[i - 1];
+    const b = buf[i];
+    if (a.t <= rt) {
+      const alpha = (rt - a.t) / (b.t - a.t);
+      return { t: rt, x: a.x + (b.x - a.x) * alpha, z: a.z + (b.z - a.z) * alpha, rotY: lerpAngle(a.rotY, b.rotY, alpha) };
+    }
+  }
+  return buf[0];
 }
 
 function makeNameLabel(name: string, role: string): THREE.Sprite {
@@ -52,7 +89,7 @@ function makePlayerMesh(name: string, role: string): PlayerMesh {
   marker.position.y = 2.8;
   marker.visible = false;
   group.add(marker);
-  return { group, body, marker };
+  return { group, body, head, marker };
 }
 
 function makeCarMesh(): THREE.Group {
@@ -84,6 +121,8 @@ export class Avatars {
   readonly serverOffset: number;
   private players = new Map<string, PlayerMesh>();
   private cars = new Map<string, THREE.Group>();
+  private playerSnaps = new Map<string, Snap[]>();
+  private carSnaps = new Map<string, Snap[]>();
 
   constructor(private scene: THREE.Scene, private room: Room) {
     this.serverOffset = (room.state as any).serverTime - Date.now();
@@ -93,7 +132,10 @@ export class Avatars {
 
     $(room.state).players.onAdd((p: any, id: string) => {
       const mesh = makePlayerMesh(p.name ?? 'игрок', p.role ?? 'citizen');
+      mesh.group.position.set(p.x, 0, p.z); // сразу на месте, без «прилёта» из (0,0,0)
+      mesh.group.rotation.y = p.rotY;
       this.players.set(id, mesh);
+      this.playerSnaps.set(id, []);
       scene.add(mesh.group);
     });
     $(room.state).players.onRemove((_p: any, id: string) => {
@@ -101,11 +143,15 @@ export class Avatars {
       if (mesh) {
         scene.remove(mesh.group);
         this.players.delete(id);
+        this.playerSnaps.delete(id);
       }
     });
-    $(room.state).cars.onAdd((_c: any, id: string) => {
+    $(room.state).cars.onAdd((c: any, id: string) => {
       const mesh = makeCarMesh();
+      mesh.position.set(c.x, 0, c.z);
+      mesh.rotation.y = c.rotY;
       this.cars.set(id, mesh);
+      this.carSnaps.set(id, []);
       scene.add(mesh);
     });
     $(room.state).cars.onRemove((_c: any, id: string) => {
@@ -113,6 +159,7 @@ export class Avatars {
       if (mesh) {
         scene.remove(mesh);
         this.cars.delete(id);
+        this.carSnaps.delete(id);
       }
     });
   }
@@ -121,25 +168,51 @@ export class Avatars {
     return Date.now() + this.serverOffset;
   }
 
-  update(dt: number): void {
-    const k = Math.min(1, dt * 10);
+  update(_dt: number): void {
     const nowServer = this.serverNow();
+    const rt = nowServer - INTERP_DELAY_MS;
 
     this.players.forEach((mesh, id) => {
       const p = (this.room.state.players as any).get(id);
       if (!p) return;
-      mesh.group.position.lerp(new THREE.Vector3(p.x, 0, p.z), k);
-      mesh.group.rotation.y = p.rotY;
+      if (id === this.room.sessionId) {
+        // себя не интерполируем — иначе управление ватное
+        mesh.group.position.set(p.x, 0, p.z);
+        mesh.group.rotation.y = p.rotY;
+      } else {
+        const buf = this.playerSnaps.get(id)!;
+        pushSnap(buf, nowServer, p.x, p.z, p.rotY);
+        const s = sampleSnap(buf, rt);
+        if (s) {
+          mesh.group.position.set(s.x, 0, s.z);
+          mesh.group.rotation.y = s.rotY;
+        }
+      }
       (mesh.body.material as THREE.MeshLambertMaterial).color.set(p.role === 'cop' ? 0x2244ff : 0x888888);
       mesh.marker.visible = p.wantedUntil > nowServer;
-      mesh.group.visible = p.mode !== 'car' && p.mode !== 'dead';
+      mesh.group.visible = p.mode !== 'dead';
+      // в машине прячем только тело — табличка остаётся над машиной
+      const onFoot = p.mode !== 'car';
+      mesh.body.visible = onFoot;
+      mesh.head.visible = onFoot;
     });
 
     this.cars.forEach((mesh, id) => {
       const c = (this.room.state.cars as any).get(id);
       if (!c) return;
-      mesh.position.lerp(new THREE.Vector3(c.x, 0, c.z), k);
-      mesh.rotation.y = c.rotY;
+      if (c.driverId === this.room.sessionId) {
+        // свою машину не интерполируем
+        mesh.position.set(c.x, 0, c.z);
+        mesh.rotation.y = c.rotY;
+      } else {
+        const buf = this.carSnaps.get(id)!;
+        pushSnap(buf, nowServer, c.x, c.z, c.rotY);
+        const s = sampleSnap(buf, rt);
+        if (s) {
+          mesh.position.set(s.x, 0, s.z);
+          mesh.rotation.y = s.rotY;
+        }
+      }
     });
   }
 }

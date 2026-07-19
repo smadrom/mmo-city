@@ -139,6 +139,8 @@ function makeCarMesh(): THREE.Group {
 
 export class Avatars {
   readonly serverOffset: number;
+  // предсказанная позиция себя (пешком); null — едем по серверному state
+  selfPos: { x: number; z: number } | null = null;
   private players = new Map<string, PlayerMesh>();
   private cars = new Map<string, THREE.Group>();
   private playerSnaps = new Map<string, Snap[]>();
@@ -196,8 +198,8 @@ export class Avatars {
       const p = (this.room.state.players as any).get(id);
       if (!p) return;
       if (id === this.room.sessionId) {
-        // себя не интерполируем — иначе управление ватное
-        mesh.group.position.set(p.x, 0, p.z);
+        // себя не интерполируем — иначе управление ватное; пешком — предсказание
+        mesh.group.position.set(this.selfPos?.x ?? p.x, 0, this.selfPos?.z ?? p.z);
         mesh.group.rotation.y = p.rotY;
       } else {
         const buf = this.playerSnaps.get(id)!;

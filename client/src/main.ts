@@ -3,6 +3,7 @@ import { buildWorld } from './world.js';
 import { connect } from './net.js';
 import { Avatars } from './avatars.js';
 import { InputController } from './input.js';
+import { Prediction } from './prediction.js';
 import { updateCamera } from './camera.js';
 import { UI } from './ui.js';
 import { Effects } from './effects.js';
@@ -61,11 +62,18 @@ function bootGame(room: Room): void {
   });
 
   const clock = new THREE.Clock();
+  const prediction = new Prediction();
   renderer.setAnimationLoop(() => {
     const dt = clock.getDelta();
+    input.refresh();
+    const me = (room.state.players as any).get(room.sessionId);
+    if (me) {
+      const predicted = prediction.update(dt, input.current, me.mode, me.x, me.z);
+      avatars.selfPos = predicted ? { x: prediction.x, z: prediction.z } : null;
+      updateCamera(camera, avatars.selfPos?.x ?? me.x, avatars.selfPos?.z ?? me.z, input.yaw);
+    }
     avatars.update(dt);
     effects.update();
-    updateCamera(camera, room, input.yaw);
     ui.update();
     renderer.render(scene, camera);
   });

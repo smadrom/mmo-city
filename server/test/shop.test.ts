@@ -66,4 +66,11 @@ describe('оружейный магазин', () => {
     expect(p.ammo).toBe(AMMO_MAX);
     expect(p.cash).toBe(5000 - AMMO_PACK_PRICE * 2);
   });
+
+  it('bad_kind: ключ из прототипа Object не проходит', () => {
+    const { state, p } = setup();
+    expect(tryBuyWeapon(state, 's1', 'toString', map)).toBe('bad_kind');
+    expect(p.weapon).toBe('');
+    expect(Number.isFinite(p.cash)).toBe(true);
+  });
 });

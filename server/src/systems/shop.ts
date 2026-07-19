@@ -17,7 +17,7 @@ function buyerAtShop(state: GameState, playerId: string, map: CityMap): Player |
 export function tryBuyWeapon(state: GameState, playerId: string, kind: string, map: CityMap): BuyWeaponResult {
   const p = buyerAtShop(state, playerId, map);
   if (!p) return 'too_far';
-  if (!(kind in WEAPONS)) return 'bad_kind';
+  if (!Object.hasOwn(WEAPONS, kind)) return 'bad_kind';
   const w = WEAPONS[kind as WeaponKind];
   if (p.cash < w.price) return 'no_money';
   p.cash -= w.price;

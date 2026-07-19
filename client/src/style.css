@@ -47,3 +47,15 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
   position: fixed; inset: 0; pointer-events: none; z-index: 8;
   box-shadow: inset 0 0 80px 40px rgba(255, 0, 0, .55);
 }
+
+#chat {
+  position: absolute; bottom: 130px; left: 10px; width: 340px;
+  max-height: 130px; overflow-y: auto; color: #fff; font-size: 14px;
+  background: rgba(0,0,0,.45); padding: 6px 10px; border-radius: 6px;
+}
+#chat div { margin: 2px 0; overflow-wrap: break-word; }
+#chatInput {
+  position: absolute; bottom: 94px; left: 10px; width: 340px;
+  padding: 6px 10px; font-size: 14px; border: none; border-radius: 6px;
+  background: rgba(20,20,40,.95); color: #fff; pointer-events: auto;
+}

@@ -4,8 +4,13 @@ export class InputController {
   yaw = 0;
   private keys = new Set<string>();
 
+  private isTyping(): boolean {
+    return document.activeElement === document.getElementById('chatInput');
+  }
+
   constructor(private room: Room, dom: HTMLElement) {
     window.addEventListener('keydown', (e) => {
+      if (this.isTyping()) return;
       this.keys.add(e.code);
       if (e.code === 'KeyE') room.send('interact');
     });
@@ -20,6 +25,7 @@ export class InputController {
     });
 
     setInterval(() => {
+      if (this.isTyping()) this.keys.clear(); // стоим, пока печатаем
       room.send('input', {
         up: this.keys.has('KeyW'),
         down: this.keys.has('KeyS'),

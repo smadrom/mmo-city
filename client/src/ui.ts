@@ -14,6 +14,8 @@ export class UI {
   private shopDialog = document.getElementById('shopDialog')!;
   private toast = document.getElementById('toast')!;
   private toastTimer = 0;
+  private chat = document.getElementById('chat')!;
+  private chatInput = document.getElementById('chatInput') as HTMLInputElement;
 
   constructor(private room: Room, private map: CityMap, private avatars: Avatars) {
     room.onMessage('openSafe', () => this.safeDialog.classList.remove('hidden'));
@@ -57,6 +59,45 @@ export class UI {
     document.getElementById('buyAmmoBtn')!.addEventListener('click', () => room.send('buyAmmo'));
     document.getElementById('shopClose')!.addEventListener('click', () => this.shopDialog.classList.add('hidden'));
     this.shopDialog.addEventListener('click', (e) => (e.target as HTMLElement).blur());
+
+    room.onMessage('chat', (msg: any) => this.appendChat(msg));
+    room.onMessage('chatHistory', (h: any) => {
+      for (const msg of h.items) this.appendChat(msg);
+    });
+    room.send('chatHistoryReq');
+
+    // Enter вне поля — открыть ввод (pointer lock снимаем, иначе фокус не уйти)
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Enter' && document.activeElement !== this.chatInput) {
+        e.preventDefault();
+        document.exitPointerLock();
+        this.chatInput.classList.remove('hidden');
+        this.chatInput.focus();
+      }
+    });
+    this.chatInput.addEventListener('keydown', (e) => {
+      e.stopPropagation(); // клавиши не доходят до InputController
+      if (e.code === 'Enter') {
+        const text = this.chatInput.value.trim();
+        if (text) room.send('chat', { text });
+        this.closeChat();
+      } else if (e.code === 'Escape') {
+        this.closeChat();
+      }
+    });
+  }
+
+  private appendChat(msg: { from: string; text: string }): void {
+    const div = document.createElement('div');
+    div.textContent = `${msg.from}: ${msg.text}`; // textContent — без XSS
+    this.chat.append(div);
+    this.chat.scrollTop = this.chat.scrollHeight;
+  }
+
+  private closeChat(): void {
+    this.chatInput.value = '';
+    this.chatInput.classList.add('hidden');
+    this.chatInput.blur();
   }
 
   private me(): any {

@@ -80,4 +80,14 @@ describe('полиция', () => {
     tickPolice(state, runtimes, COP_SALARY_INTERVAL_MS + 1, 0.05, map);
     expect(crim.cash).toBe(0);
   });
+
+  it('арест конфискует оружие и патроны', () => {
+    const { state, crim, runtimes } = setup();
+    crim.weapon = 'pistol';
+    crim.ammo = 30;
+    for (let i = 0; i < 3; i++) tickPolice(state, runtimes, 1000 + i * 1000, 1, map);
+    expect(crim.mode).toBe('jail');
+    expect(crim.weapon).toBe('');
+    expect(crim.ammo).toBe(0);
+  });
 });

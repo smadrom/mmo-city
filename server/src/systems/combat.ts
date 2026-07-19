@@ -98,6 +98,8 @@ export function killPlayer(
   victim.cash = Math.floor(victim.cash * (1 - DEATH_CASH_LOSS));
   victim.cargo = false;
   victim.deliveryTarget = '';
+  victim.weapon = '';
+  victim.ammo = 0;
   vrt.deaths++;
   vrt.respawnAt = now + RESPAWN_DELAY_MS;
 

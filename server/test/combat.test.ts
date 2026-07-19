@@ -171,4 +171,15 @@ describe('бой', () => {
     expect(a.wantedUntil).toBe(now + WANTED_DURATION_MS);
     expect(runtimes.get('a')!.kills).toBe(1);
   });
+
+  it('смерть сжигает оружие и патроны', () => {
+    const { state, v, runtimes } = setup();
+    v.weapon = 'rifle';
+    v.ammo = 120;
+    v.hp = PUNCH_DAMAGE;
+    handleAttack(state, runtimes, 'a', 1000, []);
+    expect(v.mode).toBe('dead');
+    expect(v.weapon).toBe('');
+    expect(v.ammo).toBe(0);
+  });
 });

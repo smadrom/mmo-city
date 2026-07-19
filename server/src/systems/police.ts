@@ -62,6 +62,8 @@ export function tickPolice(
     crim.cash = Math.floor(crim.cash * (1 - ARREST_CASH_LOSS));
     crim.cargo = false;
     crim.deliveryTarget = '';
+    crim.weapon = '';
+    crim.ammo = 0;
     crt.arrestProgress = 0;
     const cop = state.players.get(copId);
     if (cop) cop.cash += ARREST_BONUS;

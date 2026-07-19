@@ -8,6 +8,8 @@ interface PlayerMesh {
   head: THREE.Mesh;
   marker: THREE.Mesh;
   gun: THREE.Mesh;
+  fistL: THREE.Mesh;
+  fistR: THREE.Mesh;
 }
 
 // интерполяция: рендерим чужих с задержкой INTERP_DELAY_MS по буферу снапшотов
@@ -99,7 +101,15 @@ function makePlayerMesh(name: string, role: string): PlayerMesh {
   gun.position.set(0.45, 1.2, -0.35);
   gun.visible = false;
   group.add(gun);
-  return { group, body, head, marker, gun };
+  const fistGeo = new THREE.SphereGeometry(0.18, 8, 6);
+  const fistMat = new THREE.MeshLambertMaterial({ color: 0xffcc99 });
+  const fistL = new THREE.Mesh(fistGeo, fistMat);
+  fistL.position.set(-0.55, 1.2, -0.15);
+  group.add(fistL);
+  const fistR = new THREE.Mesh(fistGeo, fistMat);
+  fistR.position.set(0.55, 1.2, -0.15);
+  group.add(fistR);
+  return { group, body, head, marker, gun, fistL, fistR };
 }
 
 function makeCarMesh(): THREE.Group {
@@ -205,6 +215,10 @@ export class Avatars {
       const onFoot = p.mode !== 'car';
       mesh.body.visible = onFoot;
       mesh.head.visible = onFoot;
+      // кулаки — только пешим и с пустыми руками
+      const handsFree = onFoot && !p.weapon;
+      mesh.fistL.visible = handsFree;
+      mesh.fistR.visible = handsFree;
       const w = p.weapon && Object.hasOwn(WEAPONS, p.weapon) ? WEAPONS[p.weapon as WeaponKind] : null;
       mesh.gun.visible = onFoot && w?.ranged === true;
     });

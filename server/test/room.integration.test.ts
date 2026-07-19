@@ -85,4 +85,53 @@ describe('CityRoom (integration)', () => {
     const c2 = await testServer.connectTo(room, { name: 'persist1', role: 'citizen' });
     expect(room.state.players.get(c2.sessionId).cash).toBe(1234);
   });
+
+  it('покупка оружия через buyWeapon у магазина', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const client = await testServer.connectTo(room, { name: 'shoper', role: 'citizen' });
+    const p = room.state.players.get(client.sessionId);
+    const shop = createCityMap().gunShop;
+    p.x = shop.x;
+    p.z = shop.z;
+    p.cash = 1000;
+    let result: any = null;
+    client.onMessage('shopResult', (msg) => { result = msg; });
+    client.send('buyWeapon', { kind: 'pistol' });
+    await new Promise(r => setTimeout(r, 200));
+    expect(result).toEqual({ ok: true, reason: 'ok' });
+    expect(p.weapon).toBe('pistol');
+    expect(p.cash).toBe(400);
+  });
+
+  it('interact у магазина шлёт openShop', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const client = await testServer.connectTo(room, { name: 'shoper2', role: 'citizen' });
+    const p = room.state.players.get(client.sessionId);
+    const shop = createCityMap().gunShop;
+    p.x = shop.x;
+    p.z = shop.z;
+    let opened = false;
+    client.onMessage('openShop', () => { opened = true; });
+    client.send('interact');
+    await new Promise(r => setTimeout(r, 200));
+    expect(opened).toBe(true);
+  });
+
+  it('выстрел через attack: урон жертве и broadcast shot', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const shooter = await testServer.connectTo(room, { name: 'sh1', role: 'citizen' });
+    const victim = await testServer.connectTo(room, { name: 'v1', role: 'citizen' });
+    const ps = room.state.players.get(shooter.sessionId);
+    const pv = room.state.players.get(victim.sessionId);
+    // открытая местность без зданий (середина дороги), стрелок смотрит в -z
+    ps.x = 0; ps.z = 50; ps.rotY = 0; ps.weapon = 'pistol'; ps.ammo = 10;
+    pv.x = 0; pv.z = 30;
+    let shot: any = null;
+    victim.onMessage('shot', (msg) => { shot = msg; });
+    shooter.send('attack');
+    await new Promise(r => setTimeout(r, 200));
+    expect(pv.hp).toBeLessThan(100);
+    expect(shot?.hit).toBe(true);
+    expect(shot?.victim).toBe(victim.sessionId);
+  });
 });

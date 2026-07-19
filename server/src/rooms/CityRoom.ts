@@ -12,6 +12,7 @@ import { handleAttack, tickRespawn } from '../systems/combat.js';
 import { tickPolice } from '../systems/police.js';
 import { tryStartDelivery, tickDelivery } from '../systems/economy.js';
 import { tryRent, adjustSafe, tickRent } from '../systems/housing.js';
+import { tryBuyWeapon, tryBuyAmmo } from '../systems/shop.js';
 
 const SAVE_INTERVAL_MS = 5000;
 
@@ -64,7 +65,16 @@ export class CityRoom extends Room<GameState> {
       };
     });
     this.onMessage('attack', (client) => {
-      handleAttack(this.state, this.runtimes, client.sessionId, Date.now(), this.colliders);
+      const shot = handleAttack(this.state, this.runtimes, client.sessionId, Date.now(), this.colliders);
+      if (shot) this.broadcast('shot', shot);
+    });
+    this.onMessage('buyWeapon', (client, data) => {
+      const reason = tryBuyWeapon(this.state, client.sessionId, String(data?.kind ?? ''), this.map);
+      client.send('shopResult', { ok: reason === 'ok', reason });
+    });
+    this.onMessage('buyAmmo', (client) => {
+      const reason = tryBuyAmmo(this.state, client.sessionId, this.map);
+      client.send('shopResult', { ok: reason === 'ok', reason });
     });
     this.onMessage('interact', (client) => this.handleInteract(client));
     this.onMessage('deposit', (client, data) => {
@@ -93,6 +103,8 @@ export class CityRoom extends Room<GameState> {
     p.z = door.z + Math.random() * 2; // только в сторону от здания, чтобы не заспавнить в коллизии
     p.cash = rec.cash;
     p.safe = rec.safe;
+    p.weapon = rec.weapon;
+    p.ammo = rec.ammo;
     if (rec.apt) {
       const apt = this.state.apartments.get(rec.apt);
       if (apt && (!apt.rentedBy || apt.rentedBy === name)) {
@@ -161,6 +173,10 @@ export class CityRoom extends Room<GameState> {
       return;
     }
     if (p.mode !== 'foot') return;
+    if (dist2(p.x, p.z, this.map.gunShop.x, this.map.gunShop.z) < DOOR_DIST * DOOR_DIST) {
+      client.send('openShop');
+      return;
+    }
     let nearApt: Apartment | null = null;
     this.state.apartments.forEach((a) => {
       if (nearApt) return;

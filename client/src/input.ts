@@ -1,20 +1,27 @@
 import type { Room } from 'colyseus.js';
 import type { MoveInput } from '@mmo/shared';
 
+export function isTypingTarget(): boolean {
+  const ae = document.activeElement as HTMLElement | null;
+  return !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
+}
+
 export class InputController {
   yaw = 0;
   aiming = false;
   // текущее состояние ввода — читается предсказанием каждый кадр (refresh)
   readonly current: MoveInput = { up: false, down: false, left: false, right: false, sprint: false, rotY: 0 };
   private keys = new Set<string>();
+  private blocked = false; // оверлей (телефон/карта) — игровой ввод глушим
 
-  private isTyping(): boolean {
-    return document.activeElement === document.getElementById('chatInput');
+  setBlocked(v: boolean): void {
+    this.blocked = v;
+    if (v) { this.keys.clear(); this.aiming = false; this.refresh(); }
   }
 
   constructor(private room: Room, dom: HTMLElement) {
     window.addEventListener('keydown', (e) => {
-      if (this.isTyping()) return;
+      if (isTypingTarget() || this.blocked) return;
       if (e.repeat) return; // автоповтор зажатой клавиши (зажатый E не шлёт interact подряд)
       this.keys.add(e.code);
       if (e.code === 'KeyE') room.send('interact');
@@ -28,7 +35,7 @@ export class InputController {
 
     dom.addEventListener('click', () => {
       if (document.pointerLockElement !== dom) dom.requestPointerLock();
-      else room.send('attack');
+      else if (!this.blocked) room.send('attack');
     });
     window.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement === dom) this.yaw -= e.movementX * 0.003;
@@ -38,7 +45,7 @@ export class InputController {
     dom.addEventListener('contextmenu', (e) => e.preventDefault()); // без меню по ПКМ
 
     setInterval(() => {
-      if (this.isTyping()) this.keys.clear(); // стоим, пока печатаем
+      if (isTypingTarget() || this.blocked) this.keys.clear(); // стоим, пока печатаем / открыт оверлей
       this.refresh();
       room.send('input', this.current);
     }, 50);

@@ -62,3 +62,19 @@ export const CHAT_HISTORY = 20;
 export const CHAT_HISTORY_COOLDOWN_MS = 5000; // chatHistoryReq не чаще раза в 5 сек на клиента
 
 export const MAX_PLAYERS = 100;
+
+export const PICKUP_RESPAWN_MS = 30_000;
+export const PICKUP_RADIUS = 1.5;
+
+export const ZOMBIE_COUNT = 20;
+export const ZOMBIE_HP = 60;
+export const ZOMBIE_SPEED = 4.5; // чуть медленнее шага игрока — убежать можно
+export const ZOMBIE_DAMAGE = 10;
+export const ZOMBIE_AGGRO_DIST = 25;
+export const ZOMBIE_RESPAWN_MS = 5000;
+
+export const RUNOVER_MIN_SPEED = 4; // ниже — толчок без урона
+export const RUNOVER_DAMAGE_K = 3; // урон = round(|speed| * K)
+export const RUNOVER_KNOCKBACK_K = 0.5; // отброс = |speed| * K, кап 6 м
+export const RUNOVER_REPEAT_MS = 500;
+export const CAR_CRASH_SPEED_KEEP = 0.3;

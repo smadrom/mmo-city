@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { collidesCircleAABB, moveCircle, clamp, dist2, segmentHitsAABB, segmentAABBEnterT, stepFoot } from '../src/physics.js';
+import { collidesCircleAABB, moveCircle, clamp, dist2, segmentHitsAABB, segmentAABBEnterT, stepFoot, pointInAABB, inAnyAABB } from '../src/physics.js';
 import { PLAYER_SPEED, PLAYER_SPRINT, PLAYER_RADIUS, MAP_HALF } from '../src/config.js';
 
 const wall = { x: 10, z: 0, w: 2, d: 10 }; // стена x: 9..11, z: -5..5
@@ -75,6 +75,16 @@ describe('segmentAABBEnterT', () => {
   });
 });
 
+describe('pointInAABB / inAnyAABB', () => {
+  const zone = { x: 0, z: 0, w: 10, d: 20 }; // x: -5..5, z: -10..10
+  it('точка внутри и снаружи', () => {
+    expect(pointInAABB(5, 10, zone)).toBe(true);
+    expect(pointInAABB(5.1, 0, zone)).toBe(false);
+    expect(inAnyAABB(0, 0, [zone])).toBe(true);
+    expect(inAnyAABB(100, 0, [zone])).toBe(false);
+  });
+});
+
 describe('stepFoot', () => {
   const noKeys = { up: false, down: false, left: false, right: false, sprint: false, rotY: 0 };
   const dt = 0.05; // тик 20 Гц
@@ -109,5 +119,10 @@ describe('stepFoot', () => {
   it('клэмпит у границы мира', () => {
     const r = stepFoot(-MAP_HALF + PLAYER_RADIUS - 0.01, 0, { ...noKeys, left: true }, dt, []);
     expect(r.x).toBeGreaterThanOrEqual(-MAP_HALF + PLAYER_RADIUS);
+  });
+
+  it('кастомная скорость шага (зомби медленнее игрока)', () => {
+    const r = stepFoot(0, 0, { ...noKeys, up: true }, dt, [], 4.5);
+    expect(r.z).toBeCloseTo(-4.5 * dt, 10);
   });
 });

@@ -14,6 +14,14 @@ export function collidesAny(x: number, z: number, r: number, boxes: AABB[]): boo
   return boxes.some(b => collidesCircleAABB(x, z, r, b));
 }
 
+export function pointInAABB(x: number, z: number, b: AABB): boolean {
+  return x >= b.x - b.w / 2 && x <= b.x + b.w / 2 && z >= b.z - b.d / 2 && z <= b.z + b.d / 2;
+}
+
+export function inAnyAABB(x: number, z: number, boxes: AABB[]): boolean {
+  return boxes.some(b => pointInAABB(x, z, b));
+}
+
 export function moveCircle(
   x: number, z: number, dx: number, dz: number, r: number, boxes: AABB[],
 ): { x: number; z: number } {
@@ -36,6 +44,7 @@ export interface MoveInput {
 // чтобы математика не расходилась. Без ввода возвращает позицию без изменений.
 export function stepFoot(
   x: number, z: number, inp: MoveInput, dt: number, colliders: AABB[],
+  speedWalk = PLAYER_SPEED,
 ): { x: number; z: number } {
   const mf = (inp.up ? 1 : 0) - (inp.down ? 1 : 0);
   const mr = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
@@ -47,7 +56,7 @@ export function stepFoot(
   const mx = fx * mf + rx * mr;
   const mz = fz * mf + rz * mr;
   const len = Math.hypot(mx, mz);
-  const speed = (inp.sprint ? PLAYER_SPRINT : PLAYER_SPEED) * dt / len;
+  const speed = (inp.sprint ? PLAYER_SPRINT : speedWalk) * dt / len;
   const res = moveCircle(x, z, mx * speed, mz * speed, PLAYER_RADIUS, colliders);
   return {
     x: clamp(res.x, -MAP_HALF + PLAYER_RADIUS, MAP_HALF - PLAYER_RADIUS),

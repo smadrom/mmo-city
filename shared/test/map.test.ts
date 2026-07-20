@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createCityMap, MAP_HALF, CAR_RADIUS } from '../src/index.js';
-import { collidesCircleAABB } from '../src/physics.js';
+import { collidesCircleAABB, inAnyAABB } from '../src/physics.js';
 
 describe('createCityMap', () => {
   const map = createCityMap();
@@ -42,5 +42,23 @@ describe('createCityMap', () => {
   it('есть все три точки доставки: shop, gas, port', () => {
     const ids = map.deliveryTargets.map(t => t.id).sort();
     expect(ids).toEqual(['gas', 'port', 'shop']);
+  });
+
+  it('двери больницы и полиции — внутри безопасных зон', () => {
+    expect(inAnyAABB(map.hospitalDoor.x, map.hospitalDoor.z, map.safeZones)).toBe(true);
+    expect(inAnyAABB(map.policeDoor.x, map.policeDoor.z, map.safeZones)).toBe(true);
+  });
+
+  it('точки спавна зомби и пикапов не в зданиях и в границах мира', () => {
+    for (const p of [...map.zombieSpawns, ...map.pickupSpots]) {
+      expect(Math.abs(p.x)).toBeLessThanOrEqual(MAP_HALF - 1);
+      expect(Math.abs(p.z)).toBeLessThanOrEqual(MAP_HALF - 1);
+      for (const b of map.buildings) expect(collidesCircleAABB(p.x, p.z, 1, b)).toBe(false);
+    }
+  });
+
+  it('10 пикапов, все вне безопасных зон', () => {
+    expect(map.pickupSpots).toHaveLength(10);
+    for (const p of map.pickupSpots) expect(inAnyAABB(p.x, p.z, map.safeZones)).toBe(false);
   });
 });

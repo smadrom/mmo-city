@@ -1,4 +1,5 @@
 import { MAP_HALF } from './config.js';
+import type { AABB } from './physics.js';
 
 export const ROADS = [-100, 0, 100];
 export const ROAD_WIDTH = 20;
@@ -23,7 +24,12 @@ export interface CityMap {
   jailCell: Point;
   warehouse: Point;
   gunShop: Point;
+  safeZones: AABB[];
+  zombieSpawns: Point[];
+  pickupSpots: Point[];
 }
+
+export const TARGET_LABELS: Record<string, string> = { shop: 'Магазин', gas: 'Заправка', port: 'Порт' };
 
 export function createCityMap(): CityMap {
   const buildings: BuildingDef[] = [];
@@ -85,5 +91,18 @@ export function createCityMap(): CityMap {
     jailCell: { x: 150, z: -172 },
     warehouse: { x: -150, z: 127 },
     gunShop: { x: 30, z: -50 }, // квартал (2,1), западная стена дома у дороги x=0
+    safeZones: [
+      { x: -150, z: -120, w: 50, d: 30 }, // двор больницы (z: -135..-105, дверь -133 внутри)
+      { x: 150, z: -120, w: 50, d: 30 },  // двор полиции
+    ],
+    zombieSpawns: [
+      { x: 180, z: 180 }, { x: -180, z: 180 }, { x: 180, z: -60 },
+      { x: -180, z: -60 }, { x: 60, z: 180 }, { x: -60, z: -180 },
+    ],
+    pickupSpots: [
+      { x: -150, z: -100 }, { x: 150, z: -100 }, { x: -100, z: 50 },
+      { x: 25, z: -50 }, { x: 100, z: -140 }, { x: -100, z: -140 },
+      { x: 50, z: 100 }, { x: 0, z: -20 }, { x: 170, z: 170 }, { x: -50, z: 0 },
+    ],
   };
 }

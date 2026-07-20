@@ -78,3 +78,16 @@ export const RUNOVER_DAMAGE_K = 3; // урон = round(|speed| * K)
 export const RUNOVER_KNOCKBACK_K = 0.5; // отброс = |speed| * K, кап 6 м
 export const RUNOVER_REPEAT_MS = 500;
 export const CAR_CRASH_SPEED_KEEP = 0.3;
+
+export const SMS_MAX_LEN = 140;
+export const SMS_COOLDOWN_MS = 1500;
+export const SMS_THREAD_LIMIT = 50; // сообщений на диалог за раз
+export const SMS_HISTORY_COOLDOWN_MS = 5000; // как у chatHistoryReq
+
+export const TRANSFER_MIN = 1;
+export const TRANSFER_MAX = 100_000;
+export const TRANSFER_HISTORY = 10;
+
+export const MINIMAP_SIZE = 200;  // px, диаметр круга
+export const MINIMAP_RADIUS = 60; // метров обзора от центра
+export const FULLMAP_MAX_ZOOM = 6; // кратность от «весь город влез»

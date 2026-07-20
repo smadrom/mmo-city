@@ -46,6 +46,15 @@ describe('CityRoom (integration)', () => {
     expect(room.state.players.has(client.sessionId)).toBe(true);
   });
 
+  it('input с rotY=Infinity отбрасывается в конечное значение', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const client = await testServer.connectTo(room, { name: 'rotbad', role: 'citizen' });
+    client.send('input', { up: true, down: false, left: false, right: false, sprint: false, rotY: Infinity });
+    await new Promise(r => setTimeout(r, 200));
+    const p = room.state.players.get(client.sessionId);
+    expect(Number.isFinite(p.rotY)).toBe(true);
+  });
+
   it('лимит копов: 21-й коп становится гражданином', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     const clients = [];
@@ -177,6 +186,17 @@ describe('CityRoom (integration)', () => {
     await new Promise(r => setTimeout(r, 300));
     expect(got).toHaveLength(2); // «первое» эхом отправителю + слушателю
     expect(got[0].text).toBe('первое');
+  });
+
+  it('чат: повторный chatHistoryReq в пределах 5 сек молча игнорируется', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'histspam', role: 'citizen' });
+    let count = 0;
+    c1.onMessage('chatHistory', () => { count++; });
+    c1.send('chatHistoryReq');
+    c1.send('chatHistoryReq');
+    await new Promise(r => setTimeout(r, 200));
+    expect(count).toBe(1);
   });
 
   it('чат: буфер истории держит последние 20 (21-е вытесняет первое)', async () => {

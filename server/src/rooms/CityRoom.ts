@@ -1,6 +1,6 @@
 import { Room, type Client } from 'colyseus';
 import {
-  TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY,
+  TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
   createCityMap, dist2, type AABB, type CityMap,
 } from '@mmo/shared';
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
@@ -61,9 +61,10 @@ export class CityRoom extends Room<GameState> {
     this.onMessage('input', (client, data) => {
       const rt = this.runtimes.get(client.sessionId);
       if (!rt) return;
+      const rotY = Number(data?.rotY);
       rt.input = {
         up: !!data?.up, down: !!data?.down, left: !!data?.left, right: !!data?.right,
-        sprint: !!data?.sprint, rotY: Number(data?.rotY) || 0,
+        sprint: !!data?.sprint, rotY: Number.isFinite(rotY) ? rotY : 0,
       };
     });
     this.onMessage('attack', (client) => {
@@ -93,6 +94,10 @@ export class CityRoom extends Room<GameState> {
       this.broadcast('chat', msg);
     });
     this.onMessage('chatHistoryReq', (client) => {
+      const rt = this.runtimes.get(client.sessionId);
+      const now = Date.now();
+      if (!rt || now - rt.lastChatHistAt < CHAT_HISTORY_COOLDOWN_MS) return;
+      rt.lastChatHistAt = now;
       client.send('chatHistory', { items: this.chatLog });
     });
   }

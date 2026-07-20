@@ -28,6 +28,7 @@ export function tickDelivery(state: GameState, map: CityMap, now: number): void 
       p.deliveryTarget = '';
       return;
     }
+    if (p.mode !== 'car') return; // сдавать груз можно только из машины
     const t = map.deliveryTargets.find(t => t.id === p.deliveryTarget);
     if (t && dist2(p.x, p.z, t.x, t.z) < DELIVERY_DROP_DIST * DELIVERY_DROP_DIST) {
       p.cargo = false;

@@ -59,5 +59,6 @@ export const DOOR_DIST = 3;
 export const CHAT_MAX_LEN = 120;
 export const CHAT_COOLDOWN_MS = 1500;
 export const CHAT_HISTORY = 20;
+export const CHAT_HISTORY_COOLDOWN_MS = 5000; // chatHistoryReq не чаще раза в 5 сек на клиента
 
 export const MAX_PLAYERS = 100;

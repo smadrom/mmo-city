@@ -55,6 +55,17 @@ describe('доставка', () => {
     expect(p.deliveryTarget).toBe('');
   });
 
+  it('пешком груз не сдаётся — только из машины', () => {
+    const { state, p } = setup();
+    tryStartDelivery(state, 's1', map, 1000);
+    const target = map.deliveryTargets.find(t => t.id === p.deliveryTarget)!;
+    p.x = target.x; p.z = target.z;
+    p.mode = 'foot';
+    tickDelivery(state, map, 2000);
+    expect(p.cargo).toBe(true);
+    expect(p.cash).toBe(0);
+  });
+
   it('таймаут: груз пропадает без награды', () => {
     const { state, p } = setup();
     tryStartDelivery(state, 's1', map, 1000);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GameState, Player, Car } from '../src/schema/GameState.js';
-import { tryStartDelivery, tickDelivery, tryTransfer } from '../src/systems/economy.js';
+import { tryStartDelivery, tickDelivery, tryTransfer, tryTakeJob, tryDropJob } from '../src/systems/economy.js';
 import { DELIVERY_REWARD, DELIVERY_TIME_MS, createCityMap, START_CASH, TRANSFER_MAX } from '@mmo/shared';
 import { GameDB } from '../src/db.js';
 
@@ -121,5 +121,53 @@ describe('переводы', () => {
     expect(tryTransfer(state, db, 's1', 'payee', TRANSFER_MAX + 1, 1000).error).toBe('bad_amount');
     expect(tryTransfer(state, db, 's1', 'payer', 10, 1000).error).toBe('self');
     expect(tryTransfer(state, db, 's1', 'ghost', 10, 1000).error).toBe('no_such_user');
+  });
+});
+
+describe('удалённый заказ (телефон)', () => {
+  function setupJob() {
+    const state = new GameState();
+    const p = new Player();
+    p.name = 'courier';
+    p.mode = 'car';
+    p.carId = 'car0';
+    state.players.set('s1', p);
+    const map = createCityMap();
+    return { state, p, map };
+  }
+
+  it('tryTakeJob: в машине без груза — заказ назначен, склад не нужен', () => {
+    const { state, p, map } = setupJob();
+    p.x = 0; p.z = 0; // далеко от склада (-150, 127)
+    expect(tryTakeJob(state, 's1', map, 10_000)).toBe(true);
+    expect(p.cargo).toBe(true);
+    expect(p.deliveryTarget).not.toBe('');
+    expect(p.deliveryDeadline).toBe(10_000 + DELIVERY_TIME_MS);
+  });
+
+  it('tryTakeJob: пешком или с грузом — отказ', () => {
+    const { state, p, map } = setupJob();
+    p.mode = 'foot';
+    expect(tryTakeJob(state, 's1', map, 1000)).toBe(false);
+    p.mode = 'car';
+    p.cargo = true;
+    expect(tryTakeJob(state, 's1', map, 1000)).toBe(false);
+  });
+
+  it('tryDropJob: снимает заказ; без заказа — false', () => {
+    const { state, p, map } = setupJob();
+    expect(tryDropJob(state, 's1')).toBe(false);
+    tryTakeJob(state, 's1', map, 1000);
+    expect(tryDropJob(state, 's1')).toBe(true);
+    expect(p.cargo).toBe(false);
+    expect(p.deliveryTarget).toBe('');
+  });
+
+  it('складской tryStartDelivery по-прежнему требует склад', () => {
+    const { state, p, map } = setupJob();
+    p.x = 0; p.z = 0;
+    expect(tryStartDelivery(state, 's1', map, 1000)).toBe(false);
+    p.x = map.warehouse.x; p.z = map.warehouse.z;
+    expect(tryStartDelivery(state, 's1', map, 1000)).toBe(true);
   });
 });

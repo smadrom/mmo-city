@@ -3,8 +3,19 @@ import {
   TRANSFER_MIN, TRANSFER_MAX,
   dist2, type CityMap,
 } from '@mmo/shared';
-import type { GameState } from '../schema/GameState.js';
+import type { GameState, Player } from '../schema/GameState.js';
 import type { GameDB } from '../db.js';
+
+export function canTakeDelivery(p: Player): boolean {
+  return p.mode === 'car' && !p.cargo;
+}
+
+export function assignDelivery(p: Player, map: CityMap, now: number): void {
+  const t = map.deliveryTargets[Math.floor(Math.random() * map.deliveryTargets.length)];
+  p.cargo = true;
+  p.deliveryTarget = t.id;
+  p.deliveryDeadline = now + DELIVERY_TIME_MS;
+}
 
 export function tryStartDelivery(
   state: GameState,
@@ -13,12 +24,25 @@ export function tryStartDelivery(
   now: number,
 ): boolean {
   const p = state.players.get(playerId);
-  if (!p || p.mode !== 'car' || p.cargo) return false;
+  if (!p || !canTakeDelivery(p)) return false;
   if (dist2(p.x, p.z, map.warehouse.x, map.warehouse.z) > DELIVERY_PICKUP_DIST * DELIVERY_PICKUP_DIST) return false;
-  const t = map.deliveryTargets[Math.floor(Math.random() * map.deliveryTargets.length)];
-  p.cargo = true;
-  p.deliveryTarget = t.id;
-  p.deliveryDeadline = now + DELIVERY_TIME_MS;
+  assignDelivery(p, map, now);
+  return true;
+}
+
+// телефон: тот же заказ, но без поездки на склад (машина всё равно обязательна)
+export function tryTakeJob(state: GameState, playerId: string, map: CityMap, now: number): boolean {
+  const p = state.players.get(playerId);
+  if (!p || !canTakeDelivery(p)) return false;
+  assignDelivery(p, map, now);
+  return true;
+}
+
+export function tryDropJob(state: GameState, playerId: string): boolean {
+  const p = state.players.get(playerId);
+  if (!p || !p.cargo) return false;
+  p.cargo = false;
+  p.deliveryTarget = '';
   return true;
 }
 

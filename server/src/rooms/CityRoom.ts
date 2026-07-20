@@ -1,4 +1,5 @@
 import { Room, type Client } from 'colyseus';
+import { StateView } from '@colyseus/schema';
 import {
   TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
   SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY,
@@ -197,6 +198,10 @@ export class CityRoom extends Room<GameState> {
       }
     }
     this.state.players.set(client.sessionId, p);
+
+    // приватные поля (@view) видит только владелец
+    client.view = new StateView();
+    client.view.add(p);
 
     const rt = makeRuntime(Date.now());
     rt.kills = rec.kills;

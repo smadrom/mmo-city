@@ -263,4 +263,24 @@ describe('CityRoom (integration)', () => {
     expect(history.items[0].text).toBe('msg2');
     expect(history.items[19].text).toBe('msg21');
   });
+
+  it('приватные поля видит только владелец (@view)', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const a = await testServer.connectTo(room, { name: 'viewA', role: 'citizen' });
+    const b = await testServer.connectTo(room, { name: 'viewB', role: 'citizen' });
+    // серверная авторитетная величина
+    room.state.players.get(a.sessionId).cash = 999;
+    room.state.players.get(a.sessionId).ammo = 42;
+    await new Promise(r => setTimeout(r, 300)); // дать патчам дойти до клиента A
+    const meOnA = (a.state.players as any).get(a.sessionId);
+    const otherOnA = (a.state.players as any).get(b.sessionId);
+    // свой cash/ammo реплицирован владельцу…
+    expect(meOnA.cash).toBe(999);
+    expect(meOnA.ammo).toBe(42);
+    // …а чужие приватные поля НЕ утекают (клиент их вообще не получает → undefined)
+    expect(otherOnA.cash).toBeUndefined();
+    expect(otherOnA.ammo).toBeUndefined();
+    // публичные поля чужого игрока при этом видны
+    expect(otherOnA.name).toBe('viewB');
+  });
 });

@@ -58,4 +58,68 @@ describe('GameDB', () => {
     cleanup(path);
     db = new GameDB(':memory:');
   });
+
+  it('SMS: addSms/getThread/markRead/unreadCount', () => {
+    db = new GameDB(':memory:');
+    db.load('alice'); db.load('bob');
+    db.addSms('alice', 'bob', 'привет', 1000);
+    db.addSms('bob', 'alice', 'и тебе', 2000);
+    db.addSms('alice', 'bob', 'как дела', 3000);
+    expect(db.unreadCount('bob')).toBe(2);
+    expect(db.unreadCount('alice')).toBe(1);
+    const thread = db.getThread('alice', 'bob', 50);
+    expect(thread.map(m => m.text)).toEqual(['привет', 'и тебе', 'как дела']);
+    expect(thread[0].fromNick).toBe('alice');
+    db.markRead('bob', 'alice');
+    expect(db.unreadCount('bob')).toBe(0);
+  });
+
+  it('SMS: getDialogs — по одному ряду на собеседника, свежие сверху', () => {
+    db = new GameDB(':memory:');
+    db.load('alice'); db.load('bob'); db.load('carl');
+    db.addSms('alice', 'bob', 'a→b', 1000);
+    db.addSms('carl', 'alice', 'c→a', 2000);
+    db.addSms('bob', 'alice', 'b→a', 3000);
+    const dialogs = db.getDialogs('alice');
+    expect(dialogs.map(d => d.withNick)).toEqual(['bob', 'carl']);
+    expect(dialogs[0].lastText).toBe('b→a');
+    expect(dialogs[0].unread).toBe(1);
+    expect(dialogs[1].unread).toBe(1);
+    db.markRead('alice', 'bob');
+    expect(db.getDialogs('alice')[0].unread).toBe(0);
+  });
+
+  it('getThread режет до limit последних (хронология сохраняется)', () => {
+    db = new GameDB(':memory:');
+    db.load('a'); db.load('b');
+    for (let i = 1; i <= 5; i++) db.addSms('a', 'b', `m${i}`, i * 1000);
+    expect(db.getThread('a', 'b', 3).map(m => m.text)).toEqual(['m3', 'm4', 'm5']);
+  });
+
+  it('transfer: успех списывает и зачисляет, пишет историю', () => {
+    db = new GameDB(':memory:');
+    db.load('alice'); db.load('bob'); // по START_CASH
+    expect(db.transfer('alice', 'bob', 200, 5000)).toBe(true);
+    expect(db.load('alice').cash).toBe(START_CASH - 200);
+    expect(db.load('bob').cash).toBe(START_CASH + 200);
+    const hist = db.getTransfers('bob', 10);
+    expect(hist).toHaveLength(1);
+    expect(hist[0]).toMatchObject({ fromNick: 'alice', toNick: 'bob', amount: 200, ts: 5000 });
+  });
+
+  it('transfer: нехватка средств — false, балансы и история не тронуты', () => {
+    db = new GameDB(':memory:');
+    db.load('alice'); db.load('bob');
+    expect(db.transfer('alice', 'bob', START_CASH + 1, 5000)).toBe(false);
+    expect(db.load('alice').cash).toBe(START_CASH);
+    expect(db.load('bob').cash).toBe(START_CASH);
+    expect(db.getTransfers('alice', 10)).toHaveLength(0);
+  });
+
+  it('hasPlayer: true для существующего, false для неизвестного', () => {
+    db = new GameDB(':memory:');
+    db.load('alice');
+    expect(db.hasPlayer('alice')).toBe(true);
+    expect(db.hasPlayer('ghost')).toBe(false);
+  });
 });

@@ -303,7 +303,7 @@ export class CityRoom extends Room<GameState> {
         tryStartDelivery(this.state, client.sessionId, this.map, Date.now());
         return;
       }
-      tryExitCar(this.state, client.sessionId);
+      tryExitCar(this.state, client.sessionId, this.colliders);
       return;
     }
     if (p.mode !== 'foot') return;

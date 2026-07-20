@@ -154,15 +154,26 @@ export function tryEnterCar(state: GameState, playerId: string): boolean {
   return true;
 }
 
-export function tryExitCar(state: GameState, playerId: string): boolean {
+export function tryExitCar(state: GameState, playerId: string, colliders: AABB[]): boolean {
   const p = state.players.get(playerId);
   if (!p || p.mode !== 'car') return false;
   const car = state.cars.get(p.carId);
   if (car) {
     car.driverId = '';
     car.speed = 0;
-    p.x = car.x + Math.cos(car.rotY) * 2;
-    p.z = car.z - Math.sin(car.rotY) * 2;
+    // высаживаем в первую свободную точку вокруг машины (иначе можно оказаться в здании)
+    const cand: [number, number][] = [
+      [Math.cos(car.rotY) * 2, -Math.sin(car.rotY) * 2],   // перед (как раньше)
+      [-Math.cos(car.rotY) * 2, Math.sin(car.rotY) * 2],   // зад
+      [Math.sin(car.rotY) * 2, Math.cos(car.rotY) * 2],    // бок
+      [-Math.sin(car.rotY) * 2, -Math.cos(car.rotY) * 2],  // другой бок
+    ];
+    let ox = 0, oz = 0; // фолбэк — центр машины, если всё занято
+    for (const [dx, dz] of cand) {
+      if (!collidesAny(car.x + dx, car.z + dz, PLAYER_RADIUS, colliders)) { ox = dx; oz = dz; break; }
+    }
+    p.x = clamp(car.x + ox, -MAP_HALF + PLAYER_RADIUS, MAP_HALF - PLAYER_RADIUS);
+    p.z = clamp(car.z + oz, -MAP_HALF + PLAYER_RADIUS, MAP_HALF - PLAYER_RADIUS);
   }
   p.mode = 'foot';
   p.carId = '';

@@ -5,7 +5,7 @@ import { tickVehicles, tryEnterCar, tryExitCar, type CarRuntime } from '../src/s
 import {
   CAR_ACCEL, CAR_MAX_SPEED, CAR_REVERSE_SPEED, CAR_PARK_RETURN_MS,
   MAX_HP, RUNOVER_DAMAGE_K, WANTED_DURATION_MS, CAR_CRASH_SPEED_KEEP, pointInAABB,
-  type ParkingSpot,
+  PLAYER_RADIUS, collidesAny, type ParkingSpot,
 } from '@mmo/shared';
 
 function setup() {
@@ -100,10 +100,19 @@ describe('машины', () => {
   it('выход из машины: игрок рядом, машина свободна', () => {
     const { state, p, car } = setup();
     tryEnterCar(state, 's1');
-    expect(tryExitCar(state, 's1')).toBe(true);
+    expect(tryExitCar(state, 's1', [])).toBe(true);
     expect(p.mode).toBe('foot');
     expect(car.driverId).toBe('');
     expect(car.speed).toBe(0);
+  });
+
+  it('выход из машины ищет свободную точку (не ставит в здание)', () => {
+    const { state, p } = setup();
+    tryEnterCar(state, 's1'); // машина на (5,0), rotY=0 → дефолтная точка выхода (7,0)
+    const wall = { x: 7, z: 0, w: 2, d: 2 }; // перекрывает дефолтную точку выхода
+    expect(tryExitCar(state, 's1', [wall])).toBe(true);
+    expect(p.mode).toBe('foot');
+    expect(collidesAny(p.x, p.z, PLAYER_RADIUS, [wall])).toBe(false); // не в здании
   });
 
   it('брошенная машина возвращается на парковку через CAR_PARK_RETURN_MS', () => {

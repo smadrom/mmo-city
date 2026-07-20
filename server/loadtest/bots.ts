@@ -25,6 +25,10 @@ async function main(): Promise<void> {
       // изредка машем кулаками и жмём E
       setInterval(() => { if (Math.random() < 0.2) room.send('attack'); }, 2000);
       setInterval(() => { if (Math.random() < 0.1) room.send('interact'); }, 5000);
+      // покупки в профиле нагрузки: вдали от магазина честно вернут too_far — тоже работа обработчика
+      room.onMessage('shopResult', () => {}); // гасим warning о неподписанном типе
+      setInterval(() => { if (Math.random() < 0.1) room.send('buyWeapon', { kind: 'pistol' }); }, 7000);
+      setInterval(() => { if (Math.random() < 0.1) room.send('buyAmmo'); }, 9000);
     } catch (e) {
       console.error(`bot${i} не подключился:`, e);
     }

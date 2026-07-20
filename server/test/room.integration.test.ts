@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Server } from 'colyseus';
-import { createCityMap, CAR_ENTER_DIST } from '@mmo/shared';
+import { createCityMap, CAR_ENTER_DIST, ZOMBIE_COUNT, PUNCH_DAMAGE } from '@mmo/shared';
 import { CityRoom } from '../src/rooms/CityRoom.js';
 import type { GameState } from '../src/schema/GameState.js';
 
@@ -22,7 +22,7 @@ describe('CityRoom (integration)', () => {
   it('игрок заходит и появляется в состоянии комнаты', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     const client = await testServer.connectTo(room, { name: 'int1', role: 'citizen' });
-    expect(room.state.players.size).toBe(1);
+    expect(room.state.players.size).toBe(1 + ZOMBIE_COUNT); // 20 зомби спавнятся в onCreate
     const p = room.state.players.get(client.sessionId);
     expect(p.name).toBe('int1');
     expect(p.cash).toBe(500);
@@ -30,6 +30,7 @@ describe('CityRoom (integration)', () => {
 
   it('ввод двигает игрока', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
+    room.state.players.forEach((p: any) => { if (p.role === 'zombie') { p.x = 190; p.z = 190; } }); // отгоняем зомби
     const client = await testServer.connectTo(room, { name: 'int2', role: 'citizen' });
     const before = room.state.players.get(client.sessionId).z;
     client.send('input', { up: true, down: false, left: false, right: false, sprint: false, rotY: 0 });
@@ -70,6 +71,7 @@ describe('CityRoom (integration)', () => {
 
   it('вход в машину через interact у парковки', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
+    room.state.players.forEach((p: any) => { if (p.role === 'zombie') { p.x = 190; p.z = 190; } }); // отгоняем зомби
     const client = await testServer.connectTo(room, { name: 'driver1', role: 'citizen' });
     const spot = createCityMap().parkingSpots[0];
     const p = room.state.players.get(client.sessionId);
@@ -128,6 +130,7 @@ describe('CityRoom (integration)', () => {
 
   it('выстрел через attack: урон жертве и broadcast shot', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
+    room.state.players.forEach((p: any) => { if (p.role === 'zombie') { p.x = 190; p.z = 190; } }); // отгоняем зомби
     const shooter = await testServer.connectTo(room, { name: 'sh1', role: 'citizen' });
     const victim = await testServer.connectTo(room, { name: 'v1', role: 'citizen' });
     const ps = room.state.players.get(shooter.sessionId);
@@ -142,6 +145,50 @@ describe('CityRoom (integration)', () => {
     expect(pv.hp).toBeLessThan(100);
     expect(shot?.hit).toBe(true);
     expect(shot?.victim).toBe(victim.sessionId);
+  });
+
+  it('зомби создаются в комнате и не пишутся в БД', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    let zombies = 0;
+    room.state.players.forEach((p: any) => { if (p.role === 'zombie') zombies++; });
+    expect(zombies).toBe(ZOMBIE_COUNT);
+    const z0 = room.state.players.get('z0');
+    z0.cash = 777;
+    (room as any).savePlayer('z0');
+    expect((room as any).db.load('Зомби').cash).not.toBe(777); // запись не создалась/не обновилась
+  });
+
+  it('удар кулаком: broadcast hit жертве и swing всем', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    room.state.players.forEach((p: any) => { if (p.role === 'zombie') { p.x = 190; p.z = 190; } }); // отгоняем зомби
+    const c1 = await testServer.connectTo(room, { name: 'boxer', role: 'citizen' });
+    const c2 = await testServer.connectTo(room, { name: 'target', role: 'citizen' });
+    const p1 = room.state.players.get(c1.sessionId);
+    const p2 = room.state.players.get(c2.sessionId);
+    p1.x = 0; p1.z = 0; p1.rotY = 0;
+    p2.x = 0; p2.z = -1.5;
+    let hit: any = null;
+    let swing: any = null;
+    c2.onMessage('hit', (m) => { hit = m; });
+    c1.onMessage('swing', (m) => { swing = m; });
+    c1.send('attack');
+    await new Promise(r => setTimeout(r, 200));
+    expect(hit?.victim).toBe(c2.sessionId);
+    expect(hit?.damage).toBe(PUNCH_DAMAGE);
+    expect(swing?.player).toBe(c1.sessionId);
+  });
+
+  it('пикап подбирается на сервере: игрок на точке получает оружие', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    room.state.players.forEach((p: any) => { if (p.role === 'zombie') { p.x = 190; p.z = 190; } }); // отгоняем зомби
+    const client = await testServer.connectTo(room, { name: 'lucky', role: 'citizen' });
+    const p = room.state.players.get(client.sessionId);
+    const pk = [...room.state.pickups.values()][0] as any;
+    pk.kind = 'rifle';
+    p.x = pk.x; p.z = pk.z;
+    await new Promise(r => setTimeout(r, 200));
+    expect(p.weapon).toBe('rifle');
+    expect(pk.active).toBe(false);
   });
 
   it('чат: сообщение доставляется другим игрокам (и отправителю-эхом)', async () => {

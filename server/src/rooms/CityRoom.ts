@@ -8,7 +8,9 @@ import { makeRuntime, type Runtime } from '../runtime.js';
 import { GameDB } from '../db.js';
 import { tickMovement } from '../systems/movement.js';
 import { tickVehicles, tryEnterCar, tryExitCar, type CarRuntime } from '../systems/vehicles.js';
-import { handleAttack, tickRespawn } from '../systems/combat.js';
+import { handleAttack, tickRespawn, type AttackResult } from '../systems/combat.js';
+import { spawnPickups, tickPickups, type PickupRuntime } from '../systems/pickups.js';
+import { spawnZombies, tickZombies } from '../systems/zombies.js';
 import { tickPolice } from '../systems/police.js';
 import { tryStartDelivery, tickDelivery } from '../systems/economy.js';
 import { tryRent, adjustSafe, tickRent } from '../systems/housing.js';
@@ -27,6 +29,7 @@ export class CityRoom extends Room<GameState> {
   private carRuntime = new Map<string, CarRuntime>();
   private lastSaveAt = 0;
   private chatLog: ChatMessage[] = [];
+  private pickupRuntime = new Map<string, PickupRuntime>();
 
   onCreate(): void {
     this.map = createCityMap();
@@ -49,6 +52,9 @@ export class CityRoom extends Room<GameState> {
       a.doorZ = door.z;
       this.state.apartments.set(door.id, a);
     }
+    const now0 = Date.now();
+    spawnPickups(this.state, this.map, this.pickupRuntime);
+    spawnZombies(this.state, this.runtimes, this.map, now0);
 
     this.setSimulationInterval((dtMs) => {
       try {
@@ -68,8 +74,8 @@ export class CityRoom extends Room<GameState> {
       };
     });
     this.onMessage('attack', (client) => {
-      const shot = handleAttack(this.state, this.runtimes, client.sessionId, Date.now(), this.colliders);
-      if (shot) this.broadcast('shot', shot);
+      const res = handleAttack(this.state, this.runtimes, client.sessionId, Date.now(), this.colliders, this.map.safeZones);
+      this.broadcastAttack(res);
     });
     this.onMessage('buyWeapon', (client, data) => {
       const reason = tryBuyWeapon(this.state, client.sessionId, String(data?.kind ?? ''), this.map);
@@ -171,11 +177,18 @@ export class CityRoom extends Room<GameState> {
     const p = this.state.players.get(id);
     const rt = this.runtimes.get(id);
     if (!p || !rt) return;
+    if (p.role === 'zombie') return; // зомби не персистентны
     try {
       this.db.save({ name: p.name, cash: p.cash, safe: p.safe, apt: p.apt, kills: rt.kills, deaths: rt.deaths, weapon: p.weapon, ammo: p.ammo });
     } catch (err) {
       console.error('[city] db save error', err);
     }
+  }
+
+  private broadcastAttack(res: AttackResult): void {
+    if (res.shot) this.broadcast('shot', { ...res.shot, attacker: res.attacker }); // attacker — клиентской отдаче/вспышке
+    if (res.swing) this.broadcast('swing', { player: res.attacker });
+    for (const h of res.hits) this.broadcast('hit', h);
   }
 
   private handleInteract(client: Client): void {
@@ -212,7 +225,11 @@ export class CityRoom extends Room<GameState> {
     const now = Date.now();
     this.state.serverTime = now;
     tickMovement(this.state, this.runtimes, this.colliders, dt, now);
-    tickVehicles(this.state, this.runtimes, this.carRuntime, this.colliders, dt, now, this.map.parkingSpots);
+    const carHits = tickVehicles(this.state, this.runtimes, this.carRuntime, this.colliders, dt, now, this.map.parkingSpots, this.map.safeZones);
+    for (const h of carHits) this.broadcast('hit', h);
+    const zombieAttacks = tickZombies(this.state, this.runtimes, this.map, this.colliders, now);
+    for (const res of zombieAttacks) this.broadcastAttack(res);
+    tickPickups(this.state, this.pickupRuntime, now);
     tickRespawn(this.state, this.runtimes, this.map, now);
     tickPolice(this.state, this.runtimes, now, dt, this.map);
     tickDelivery(this.state, this.map, now);

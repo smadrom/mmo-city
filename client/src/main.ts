@@ -8,6 +8,7 @@ import { updateCamera } from './camera.js';
 import { UI } from './ui.js';
 import { Effects } from './effects.js';
 import { Pickups } from './pickups.js';
+import { CityMapRenderer, type MapMarker } from './minimap.js';
 import type { Room } from 'colyseus.js';
 
 const joinScreen = document.getElementById('join')!;
@@ -60,6 +61,9 @@ function bootGame(room: Room): void {
   const ui = new UI(room, map, avatars, input);
   const effects = new Effects(scene, room, avatars);
   const pickups = new Pickups(scene, room);
+  const mapRenderer = new CityMapRenderer(map);
+  const minimapCanvas = document.getElementById('minimap') as HTMLCanvasElement;
+  let lastCarId = '';
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -82,6 +86,25 @@ function bootGame(room: Room): void {
     effects.update();
     pickups.update();
     ui.update();
+    if (me) {
+      if (me.mode === 'car') lastCarId = me.carId;
+      const markers: MapMarker[] = [];
+      if (me.mode !== 'car' && lastCarId) {
+        const car = (room.state.cars as any).get(lastCarId);
+        if (!car || (car.driverId && car.driverId !== room.sessionId)) lastCarId = '';
+        else markers.push({ x: car.x, z: car.z, kind: 'car' });
+      }
+      if (me.cargo) {
+        const t = map.deliveryTargets.find(t => t.id === me.deliveryTarget);
+        if (t) markers.push({ x: t.x, z: t.z, kind: 'target' });
+      }
+      const selfView = {
+        x: avatars.selfPos?.x ?? me.x,
+        z: avatars.selfPos?.z ?? me.z,
+        rotY: me.rotY,
+      };
+      mapRenderer.renderMinimap(minimapCanvas, selfView, markers);
+    }
     renderer.render(scene, camera);
   });
 }

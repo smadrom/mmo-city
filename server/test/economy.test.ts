@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { GameState, Player, Car } from '../src/schema/GameState.js';
-import { tryStartDelivery, tickDelivery } from '../src/systems/economy.js';
-import { DELIVERY_REWARD, DELIVERY_TIME_MS, createCityMap } from '@mmo/shared';
+import { tryStartDelivery, tickDelivery, tryTransfer } from '../src/systems/economy.js';
+import { DELIVERY_REWARD, DELIVERY_TIME_MS, createCityMap, START_CASH, TRANSFER_MAX } from '@mmo/shared';
+import { GameDB } from '../src/db.js';
 
 const map = createCityMap();
 
@@ -72,5 +73,53 @@ describe('доставка', () => {
     tickDelivery(state, map, 1000 + DELIVERY_TIME_MS + 1);
     expect(p.cargo).toBe(false);
     expect(p.cash).toBe(0);
+  });
+});
+
+describe('переводы', () => {
+  function setupTransfer() {
+    const state = new GameState();
+    const p = new Player();
+    p.name = 'payer';
+    p.cash = 500;
+    state.players.set('s1', p);
+    const db = new GameDB(':memory:');
+    db.load('payer'); // cash = START_CASH в БД
+    db.load('payee');
+    return { state, p, db };
+  }
+
+  it('успех: state и БД обоих обновлены, возврат balance', () => {
+    const { state, p, db } = setupTransfer();
+    db.save({ name: 'payer', cash: 500, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 });
+    const payee = new Player();
+    payee.name = 'payee';
+    payee.cash = 100;
+    state.players.set('s2', payee);
+    const res = tryTransfer(state, db, 's1', 'payee', 200, 7000);
+    expect(res).toMatchObject({ ok: true, balance: 300, toNick: 'payee', amount: 200 });
+    expect(p.cash).toBe(300);
+    expect(payee.cash).toBe(300); // 100 + 200
+    expect(db.load('payer').cash).toBe(300);
+    expect(db.load('payee').cash).toBe(START_CASH + 200); // офлайн-часть БД: payee был START_CASH
+  });
+
+  it('нехватка средств → no_money, ничего не меняется', () => {
+    const { state, p, db } = setupTransfer();
+    db.save({ name: 'payer', cash: 500, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 });
+    const res = tryTransfer(state, db, 's1', 'payee', 501, 7000);
+    expect(res).toMatchObject({ ok: false, error: 'no_money' });
+    expect(p.cash).toBe(500);
+    expect(db.load('payer').cash).toBe(500);
+  });
+
+  it('валидация: bad_amount / self / no_such_user', () => {
+    const { state, db } = setupTransfer();
+    expect(tryTransfer(state, db, 's1', 'payee', 0, 1000).error).toBe('bad_amount');
+    expect(tryTransfer(state, db, 's1', 'payee', -50, 1000).error).toBe('bad_amount');
+    expect(tryTransfer(state, db, 's1', 'payee', 10.5, 1000).error).toBe('bad_amount');
+    expect(tryTransfer(state, db, 's1', 'payee', TRANSFER_MAX + 1, 1000).error).toBe('bad_amount');
+    expect(tryTransfer(state, db, 's1', 'payer', 10, 1000).error).toBe('self');
+    expect(tryTransfer(state, db, 's1', 'ghost', 10, 1000).error).toBe('no_such_user');
   });
 });

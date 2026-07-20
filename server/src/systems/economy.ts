@@ -1,8 +1,10 @@
 import {
   DELIVERY_REWARD, DELIVERY_TIME_MS, DELIVERY_PICKUP_DIST, DELIVERY_DROP_DIST,
+  TRANSFER_MIN, TRANSFER_MAX,
   dist2, type CityMap,
 } from '@mmo/shared';
 import type { GameState } from '../schema/GameState.js';
+import type { GameDB } from '../db.js';
 
 export function tryStartDelivery(
   state: GameState,
@@ -36,4 +38,28 @@ export function tickDelivery(state: GameState, map: CityMap, now: number): void 
       p.cash += DELIVERY_REWARD;
     }
   });
+}
+
+export type TransferError = 'bad_amount' | 'self' | 'no_such_user' | 'no_money';
+
+export function tryTransfer(
+  state: GameState,
+  db: GameDB,
+  playerId: string,
+  to: unknown,
+  amount: unknown,
+  now: number,
+): { ok: boolean; error?: TransferError; balance?: number; toNick?: string; amount?: number } {
+  const p = state.players.get(playerId);
+  if (!p) return { ok: false, error: 'no_money' };
+  const sum = typeof amount === 'number' ? amount : Number(amount);
+  if (!Number.isInteger(sum) || sum < TRANSFER_MIN || sum > TRANSFER_MAX) return { ok: false, error: 'bad_amount' };
+  const toNick = typeof to === 'string' ? to.trim() : '';
+  if (!toNick) return { ok: false, error: 'no_such_user' };
+  if (toNick === p.name) return { ok: false, error: 'self' };
+  if (!db.hasPlayer(toNick)) return { ok: false, error: 'no_such_user' };
+  if (!db.transfer(p.name, toNick, sum, now)) return { ok: false, error: 'no_money' };
+  p.cash -= sum;
+  state.players.forEach((pl) => { if (pl.name === toNick) pl.cash += sum; });
+  return { ok: true, balance: p.cash, toNick, amount: sum };
 }

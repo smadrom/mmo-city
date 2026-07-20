@@ -144,6 +144,7 @@ export class CityRoom extends Room<GameState> {
       this.db.markRead(p.name, withNick);
     });
     this.onMessage('transfer', (client, data) => {
+      this.savePlayer(client.sessionId); // синк БД с авторитетной памятью: иначе db.transfer (WHERE cash>=amount) даёт ложный no_money после свежего заработка
       const res = tryTransfer(this.state, this.db, client.sessionId, data?.to, data?.amount, Date.now());
       client.send('transferResult', { ok: res.ok, error: res.error, balance: res.balance });
       if (res.ok && res.toNick && res.amount) {

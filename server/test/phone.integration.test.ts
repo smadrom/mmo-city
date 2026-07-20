@@ -3,6 +3,7 @@ import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Server } from 'colyseus';
 import type { GameState } from '../src/schema/GameState.js';
 import { CityRoom } from '../src/rooms/CityRoom.js';
+import { START_CASH } from '@mmo/shared';
 
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -114,6 +115,20 @@ describe('Телефон (integration)', () => {
     expect(incoming).toEqual({ from: 'bank1', amount: 200 });
     expect(p1.cash).toBe(300);
     expect(p2.cash).toBe(700); // START_CASH 500 + 200
+  });
+
+  it('transfer: свежий заработок в памяти не даёт ложный no_money (авторизация по памяти)', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'fresh1', role: 'citizen' });
+    const c2 = await testServer.connectTo(room, { name: 'fresh2', role: 'citizen' });
+    // заработок только в памяти: БД ещё на START_CASH (savePlayer не вызывали)
+    room.state.players.get(c1.sessionId).cash = 900;
+    let result: any = null;
+    c1.onMessage('transferResult', (m) => { result = m; });
+    c1.send('transfer', { to: 'fresh2', amount: 700 }); // > START_CASH, но ≤ памяти
+    await wait(200);
+    expect(result).toMatchObject({ ok: true, balance: 200 });
+    expect(room.state.players.get(c2.sessionId).cash).toBe(START_CASH + 700);
   });
 
   it('transfer: нехватка средств → no_money', async () => {

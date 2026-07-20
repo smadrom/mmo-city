@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MapSchema } from '@colyseus/schema';
 import { MAX_HP } from '@mmo/shared';
-import { GameState, Player, Car, Apartment } from '../src/schema/GameState.js';
+import { GameState, Player, Car, Apartment, Pickup } from '../src/schema/GameState.js';
 
 describe('Player schema', () => {
   it('has expected defaults', () => {
@@ -36,6 +36,7 @@ describe('Car schema', () => {
     expect(c.z).toBe(0);
     expect(c.rotY).toBe(0);
     expect(c.speed).toBe(0);
+    expect(c.steer).toBe(0);
     expect(c.driverId).toBe('');
   });
 });
@@ -50,12 +51,25 @@ describe('Apartment schema', () => {
   });
 });
 
+describe('Pickup schema', () => {
+  it('has expected defaults', () => {
+    const p = new Pickup();
+    expect(p.id).toBe('');
+    expect(p.kind).toBe('');
+    expect(p.x).toBe(0);
+    expect(p.z).toBe(0);
+    expect(p.active).toBe(true);
+    expect(p.amount).toBe(0);
+  });
+});
+
 describe('GameState schema', () => {
   it('has map collections and serverTime', () => {
     const s = new GameState();
     expect(s.players).toBeInstanceOf(MapSchema);
     expect(s.cars).toBeInstanceOf(MapSchema);
     expect(s.apartments).toBeInstanceOf(MapSchema);
+    expect(s.pickups).toBeInstanceOf(MapSchema);
     expect(s.serverTime).toBe(0);
   });
 

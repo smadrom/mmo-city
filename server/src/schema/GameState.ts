@@ -3,7 +3,7 @@ import { MAX_HP } from '@mmo/shared';
 
 export class Player extends Schema {
   @type('string') name = '';
-  @type('string') role: 'citizen' | 'cop' = 'citizen';
+  @type('string') role: 'citizen' | 'cop' | 'zombie' = 'citizen';
   @type('number') x = 0;
   @type('number') y = 0;
   @type('number') z = 0;
@@ -29,6 +29,7 @@ export class Car extends Schema {
   @type('number') z = 0;
   @type('number') rotY = 0;
   @type('number') speed = 0;
+  @type('number') steer = 0;
   @type('string') driverId = '';
 }
 
@@ -39,9 +40,19 @@ export class Apartment extends Schema {
   @type('string') rentedBy = '';
 }
 
+export class Pickup extends Schema {
+  @type('string') id = '';
+  @type('string') kind = '';
+  @type('number') x = 0;
+  @type('number') z = 0;
+  @type('boolean') active = true;
+  @type('number') amount = 0; // только kind='cash'
+}
+
 export class GameState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Car }) cars = new MapSchema<Car>();
   @type({ map: Apartment }) apartments = new MapSchema<Apartment>();
+  @type({ map: Pickup }) pickups = new MapSchema<Pickup>();
   @type('number') serverTime = 0;
 }

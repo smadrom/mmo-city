@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { GameState, Player, Car } from '../src/schema/GameState.js';
 import { makeRuntime, type Runtime } from '../src/runtime.js';
 import { tickVehicles, tryEnterCar, tryExitCar, type CarRuntime } from '../src/systems/vehicles.js';
-import { CAR_ACCEL, CAR_MAX_SPEED, CAR_REVERSE_SPEED, CAR_PARK_RETURN_MS, type ParkingSpot } from '@mmo/shared';
+import {
+  CAR_ACCEL, CAR_MAX_SPEED, CAR_REVERSE_SPEED, CAR_PARK_RETURN_MS,
+  MAX_HP, RUNOVER_DAMAGE_K, WANTED_DURATION_MS, CAR_CRASH_SPEED_KEEP, pointInAABB,
+  type ParkingSpot,
+} from '@mmo/shared';
 
 function setup() {
   const state = new GameState();
@@ -109,5 +113,109 @@ describe('машины', () => {
     tickVehicles(state, runtimes, carRuntime, [], 0.05, 1000 + CAR_PARK_RETURN_MS + 1, spots);
     expect(car.x).toBe(100);
     expect(car.z).toBe(100);
+  });
+
+  it('steer пишется в схему: left = 1, без ввода 0', () => {
+    const { state, car, runtimes, carRuntime, spots } = setup();
+    tryEnterCar(state, 's1');
+    runtimes.get('s1')!.input.up = true;
+    runtimes.get('s1')!.input.left = true;
+    tickVehicles(state, runtimes, carRuntime, [], 0.05, 0, spots);
+    expect(car.steer).toBe(1);
+    runtimes.get('s1')!.input.left = false;
+    tickVehicles(state, runtimes, carRuntime, [], 0.05, 50, spots);
+    expect(car.steer).toBe(0);
+  });
+
+  it('наезд: урон по скорости, hit-событие, жертву отбрасывает', () => {
+    const { state, car, runtimes, carRuntime, spots } = setup();
+    tryEnterCar(state, 's1');
+    const v = new Player();
+    v.name = 'ped';
+    state.players.set('v', v);
+    runtimes.set('v', makeRuntime(0));
+    v.x = car.x + 0.5; v.z = car.z - 1; // в контакте (радиус 2.0)
+    const v0 = { x: v.x, z: v.z };
+    car.speed = 20; // тик сам погасит до 19.7 — всё равно > RUNOVER_MIN_SPEED
+    const hits = tickVehicles(state, runtimes, carRuntime, [], 0.05, 5000, spots);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].victim).toBe('v');
+    expect(hits[0].damage).toBeGreaterThan(0);
+    expect(v.hp).toBe(MAX_HP - hits[0].damage);
+    expect(Math.hypot(v.x - v0.x, v.z - v0.z)).toBeGreaterThan(0.5); // отброшена
+  });
+
+  it('наезд насмерть на зомби: без розыска водителю', () => {
+    const { state, p, car, runtimes, carRuntime, spots } = setup();
+    tryEnterCar(state, 's1');
+    const z = new Player();
+    z.name = 'Зомби'; z.role = 'zombie'; z.hp = 5;
+    state.players.set('z0', z);
+    runtimes.set('z0', makeRuntime(0));
+    z.x = car.x + 0.5; z.z = car.z - 1;
+    car.speed = 20;
+    tickVehicles(state, runtimes, carRuntime, [], 0.05, 5000, spots);
+    expect(z.mode).toBe('dead');
+    expect(p.wantedUntil).toBe(0); // зомби — не преступление
+  });
+
+  it('медленный контакт: только толчок, без урона', () => {
+    const { state, car, runtimes, carRuntime, spots } = setup();
+    tryEnterCar(state, 's1');
+    const v = new Player();
+    state.players.set('v', v);
+    runtimes.set('v', makeRuntime(0));
+    v.x = car.x + 0.5; v.z = car.z - 1;
+    const v0 = { x: v.x, z: v.z };
+    car.speed = 3; // < RUNOVER_MIN_SPEED
+    tickVehicles(state, runtimes, carRuntime, [], 0.05, 5000, spots);
+    expect(v.hp).toBe(MAX_HP);
+    expect(Math.hypot(v.x - v0.x, v.z - v0.z)).toBeGreaterThan(0.1); // оттолкнула
+  });
+
+  it('повторный урон той же жертве не чаще раза в 500 мс', () => {
+    const { state, car, runtimes, carRuntime, spots } = setup();
+    tryEnterCar(state, 's1');
+    const v = new Player();
+    state.players.set('v', v);
+    runtimes.set('v', makeRuntime(0));
+    v.x = car.x + 0.5; v.z = car.z - 1;
+    runtimes.get('v')!.lastDamageAt = 4900; // «только что» уже получал урон
+    car.speed = 20;
+    const hits = tickVehicles(state, runtimes, carRuntime, [], 0.05, 5000, spots);
+    expect(hits).toHaveLength(0); // кулдаун 500 мс не прошёл
+    expect(v.hp).toBe(MAX_HP);
+  });
+
+  it('таран: машины разъезжаются, скорости гаснут', () => {
+    const { state, car, runtimes, carRuntime, spots } = setup();
+    tryEnterCar(state, 's1');
+    car.speed = 10;
+    const b = new Car();
+    b.id = 'car1'; b.x = car.x + 1; b.z = car.z; b.speed = -4; // перекрытие 1 м
+    state.cars.set('car1', b);
+    carRuntime.set('car1', { emptySince: 0 });
+    tickVehicles(state, runtimes, carRuntime, [], 0.05, 1000, spots);
+    const d = Math.hypot(b.x - car.x, b.z - car.z);
+    expect(d).toBeGreaterThanOrEqual(3 - 1e-9); // 2 * CAR_RADIUS
+    expect(Math.abs(car.speed)).toBeLessThanOrEqual(10 * CAR_CRASH_SPEED_KEEP + 1e-9);
+    expect(Math.abs(b.speed)).toBeLessThanOrEqual(4 * CAR_CRASH_SPEED_KEEP + 1e-9);
+  });
+
+  it('въезд в безопасную зону: разворот на PI, остановка, снаружи', () => {
+    const { state, car, runtimes, carRuntime, spots } = setup();
+    tryEnterCar(state, 's1');
+    const zone = { x: 5, z: -20, w: 30, d: 20 }; // z: -30..-10, машина на (5,0) едет в -z
+    runtimes.get('s1')!.input.up = true;
+    const rotBefore = car.rotY;
+    let flipped = false;
+    for (let i = 0; i < 60 && !flipped; i++) {
+      tickVehicles(state, runtimes, carRuntime, [], 0.05, i * 50, spots, [zone]);
+      if (Math.abs(car.rotY - rotBefore) > 1) flipped = true; // поймали тик разворота
+    }
+    expect(flipped).toBe(true);
+    expect(pointInAABB(car.x, car.z, zone)).toBe(false);
+    expect(car.speed).toBe(0);
+    expect(Math.abs((car.rotY - rotBefore) % (Math.PI * 2))).toBeCloseTo(Math.PI, 1);
   });
 });

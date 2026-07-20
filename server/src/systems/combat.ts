@@ -1,11 +1,13 @@
 import {
   PUNCH_RANGE, PUNCH_DAMAGE, PUNCH_COOLDOWN_MS, MAX_HP,
   DEATH_CASH_LOSS, WANTED_DURATION_MS, RESPAWN_DELAY_MS,
-  WEAPONS, segmentHitsAABB, segmentAABBEnterT, dist2,
+  ZOMBIE_DAMAGE, ZOMBIE_HP, ZOMBIE_RESPAWN_MS,
+  WEAPONS, segmentHitsAABB, segmentAABBEnterT, dist2, inAnyAABB,
   type AABB, type CityMap, type Point, type WeaponKind,
 } from '@mmo/shared';
 import type { GameState } from '../schema/GameState.js';
 import type { Runtime } from '../runtime.js';
+import { spawnCashDrop } from './pickups.js';
 
 export interface Shot {
   from: Point;
@@ -14,23 +16,29 @@ export interface Shot {
   victim: string; // sessionId цели, '' при промахе
 }
 
+export interface Hit { victim: string; damage: number; x: number; z: number }
+export interface AttackResult { attacker: string; shot: Shot | null; swing: boolean; hits: Hit[] }
+const NO_ATTACK = { shot: null, swing: false, hits: [] as Hit[] };
+
 export function handleAttack(
   state: GameState,
   runtimes: Map<string, Runtime>,
   attackerId: string,
   now: number,
   colliders: AABB[],
-): Shot | null {
+  safeZones: AABB[] = [],
+): AttackResult {
   const a = state.players.get(attackerId);
   const art = runtimes.get(attackerId);
-  if (!a || !art || a.mode !== 'foot') return null;
+  if (!a || !art || a.mode !== 'foot') return { ...NO_ATTACK, attacker: attackerId };
+  if (inAnyAABB(a.x, a.z, safeZones)) return { ...NO_ATTACK, attacker: attackerId }; // из беззоны не бьём
   const w = a.weapon && Object.hasOwn(WEAPONS, a.weapon) ? WEAPONS[a.weapon as WeaponKind] : null;
   const ranged = w?.ranged === true;
   const range = w ? w.range : PUNCH_RANGE;
-  const damage = w ? w.damage : PUNCH_DAMAGE;
+  const damage = w ? w.damage : (a.role === 'zombie' ? ZOMBIE_DAMAGE : PUNCH_DAMAGE);
   const cooldownMs = w ? w.cooldownMs : PUNCH_COOLDOWN_MS;
-  if (now - art.lastAttackAt < cooldownMs) return null;
-  if (ranged && a.ammo <= 0) return null;
+  if (now - art.lastAttackAt < cooldownMs) return { ...NO_ATTACK, attacker: attackerId };
+  if (ranged && a.ammo <= 0) return { ...NO_ATTACK, attacker: attackerId };
 
   const fx = -Math.sin(a.rotY);
   const fz = -Math.cos(a.rotY);
@@ -40,6 +48,8 @@ export function handleAttack(
   state.players.forEach((t, id) => {
     if (id === attackerId) return;
     if (t.mode === 'jail' || t.mode === 'dead') return;
+    if (a.role === 'zombie' && t.role === 'zombie') return; // зомби не дерутся между собой
+    if (inAnyAABB(t.x, t.z, safeZones)) return; // жертва в беззоне неуязвима
     const d2 = dist2(a.x, a.z, t.x, t.z);
     if (d2 > bestD || d2 === 0) return;
     const len = Math.sqrt(d2);
@@ -60,24 +70,29 @@ export function handleAttack(
         const t = segmentAABBEnterT(a.x, a.z, a.x + fx * range, a.z + fz * range, b);
         if (t !== null && t < tWall) tWall = t;
       }
-      return { from: { x: a.x, z: a.z }, to: { x: a.x + fx * range * tWall, z: a.z + fz * range * tWall }, hit: false, victim: '' };
+      return { attacker: attackerId, shot: { from: { x: a.x, z: a.z }, to: { x: a.x + fx * range * tWall, z: a.z + fz * range * tWall }, hit: false, victim: '' }, swing: false, hits: [] };
     }
     const victim = state.players.get(bestId)!;
     victim.hp -= damage;
     const vrt = runtimes.get(bestId);
     if (vrt) vrt.lastDamageAt = now;
     if (victim.hp <= 0) killPlayer(state, runtimes, attackerId, bestId, now);
-    return { from: { x: a.x, z: a.z }, to: { x: victim.x, z: victim.z }, hit: true, victim: bestId };
+    return {
+      attacker: attackerId,
+      shot: { from: { x: a.x, z: a.z }, to: { x: victim.x, z: victim.z }, hit: true, victim: bestId },
+      swing: false,
+      hits: [{ victim: bestId, damage, x: victim.x, z: victim.z }],
+    };
   }
 
-  if (!bestId) return null;
+  if (!bestId) return { ...NO_ATTACK, attacker: attackerId, swing: true };
   const victim = state.players.get(bestId);
   const vrt = runtimes.get(bestId);
-  if (!victim || !vrt) return null;
+  if (!victim || !vrt) return { ...NO_ATTACK, attacker: attackerId, swing: true };
   victim.hp -= damage;
   vrt.lastDamageAt = now;
   if (victim.hp <= 0) killPlayer(state, runtimes, attackerId, bestId, now);
-  return null;
+  return { attacker: attackerId, shot: null, swing: true, hits: [{ victim: bestId, damage, x: victim.x, z: victim.z }] };
 }
 
 export function killPlayer(
@@ -99,20 +114,23 @@ export function killPlayer(
     }
     victim.carId = '';
   }
+  // доля наличных выпадает денежным пикапом на месте смерти (спека: дроп, а не сжигание)
+  const drop = Math.floor(victim.cash * DEATH_CASH_LOSS);
+  victim.cash -= drop;
+  if (drop > 0) spawnCashDrop(state, victim.x, victim.z, drop, `cash-${victimId}-${now}`);
   victim.mode = 'dead';
   victim.hp = 0;
-  victim.cash = Math.floor(victim.cash * (1 - DEATH_CASH_LOSS));
   victim.cargo = false;
   victim.deliveryTarget = '';
   victim.weapon = '';
   victim.ammo = 0;
   vrt.deaths++;
-  vrt.respawnAt = now + RESPAWN_DELAY_MS;
+  vrt.respawnAt = now + (victim.role === 'zombie' ? ZOMBIE_RESPAWN_MS : RESPAWN_DELAY_MS);
 
   if (killerId && killerId !== victimId) {
     const killer = state.players.get(killerId);
     const krt = runtimes.get(killerId);
-    if (killer) killer.wantedUntil = now + WANTED_DURATION_MS;
+    if (killer && victim.role !== 'zombie') killer.wantedUntil = now + WANTED_DURATION_MS; // за зомби розыска нет
     if (krt) krt.kills++;
   }
 }
@@ -127,13 +145,17 @@ export function tickRespawn(
     if (p.mode !== 'dead') return;
     const rt = runtimes.get(id);
     if (!rt || now < rt.respawnAt) return;
-    let door: Point = map.hospitalDoor;
-    state.apartments.forEach((apt) => {
-      if (apt.rentedBy === p.name) door = { x: apt.doorX, z: apt.doorZ };
-    });
-    p.x = door.x;
-    p.z = door.z;
-    p.hp = MAX_HP;
+    if (p.role === 'zombie') {
+      const s = map.zombieSpawns[Math.floor(Math.random() * map.zombieSpawns.length)];
+      p.x = s.x;
+      p.z = s.z;
+      p.hp = ZOMBIE_HP;
+    } else {
+      // всегда больница — респаун в безопасной зоне (спека)
+      p.x = map.hospitalDoor.x;
+      p.z = map.hospitalDoor.z;
+      p.hp = MAX_HP;
+    }
     p.mode = 'foot';
     p.wantedUntil = 0;
     p.rotY = 0;

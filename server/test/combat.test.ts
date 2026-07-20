@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { GameState, Player } from '../src/schema/GameState.js';
 import { makeRuntime, type Runtime } from '../src/runtime.js';
 import { handleAttack, tickRespawn } from '../src/systems/combat.js';
-import { PUNCH_DAMAGE, MAX_HP, WANTED_DURATION_MS, DEATH_CASH_LOSS, RESPAWN_DELAY_MS, WEAPONS, createCityMap } from '@mmo/shared';
+import { PUNCH_DAMAGE, MAX_HP, WANTED_DURATION_MS, DEATH_CASH_LOSS, RESPAWN_DELAY_MS, WEAPONS, createCityMap, ZOMBIE_DAMAGE, ZOMBIE_HP, ZOMBIE_RESPAWN_MS } from '@mmo/shared';
 
 function setup() {
   const state = new GameState();
@@ -94,7 +94,7 @@ describe('бой', () => {
     const { state, a, v, runtimes } = setup();
     a.weapon = 'pistol';
     a.ammo = 0;
-    const shot = handleAttack(state, runtimes, 'a', 1000, []);
+    const shot = handleAttack(state, runtimes, 'a', 1000, []).shot;
     expect(shot).toBeNull();
     expect(a.ammo).toBe(0);
     expect(v.hp).toBe(MAX_HP);
@@ -105,7 +105,7 @@ describe('бой', () => {
     a.weapon = 'pistol';
     a.ammo = 5;
     v.z = -20; // в пределах 40, точно по центру конуса
-    const shot = handleAttack(state, runtimes, 'a', 1000, []);
+    const shot = handleAttack(state, runtimes, 'a', 1000, []).shot;
     expect(a.ammo).toBe(4);
     expect(v.hp).toBe(MAX_HP - WEAPONS.pistol.damage);
     expect(shot).toEqual({ from: { x: 0, z: 0 }, to: { x: 0, z: -20 }, hit: true, victim: 'v' });
@@ -116,7 +116,7 @@ describe('бой', () => {
     a.weapon = 'pistol';
     a.ammo = 5;
     state.players.delete('v'); // setup ставит жертву на линию огня — убираем, выстрел уходит в пустоту
-    const shot = handleAttack(state, runtimes, 'a', 1000, []);
+    const shot = handleAttack(state, runtimes, 'a', 1000, []).shot;
     expect(a.ammo).toBe(4);
     expect(shot).toEqual({ from: { x: 0, z: 0 }, to: { x: 0, z: -40 }, hit: false, victim: '' });
   });
@@ -145,7 +145,7 @@ describe('бой', () => {
     a.ammo = 5;
     v.z = -20;
     const wall = [{ x: 0, z: -10, w: 4, d: 2 }]; // ближняя грань z=-9
-    const shot = handleAttack(state, runtimes, 'a', 1000, wall);
+    const shot = handleAttack(state, runtimes, 'a', 1000, wall).shot;
     expect(v.hp).toBe(MAX_HP);
     expect(shot?.hit).toBe(false);
     expect(shot?.to.x).toBeCloseTo(0, 10);
@@ -183,5 +183,100 @@ describe('бой', () => {
     expect(v.mode).toBe('dead');
     expect(v.weapon).toBe('');
     expect(v.ammo).toBe(0);
+  });
+
+  it('промах кулаком: swing=true, hits пуст', () => {
+    const { state, runtimes } = setup();
+    state.players.delete('v');
+    const res = handleAttack(state, runtimes, 'a', 1000, []);
+    expect(res.swing).toBe(true);
+    expect(res.hits).toHaveLength(0);
+    expect(res.attacker).toBe('a');
+  });
+
+  it('попадание: hits с уроном и координатами жертвы', () => {
+    const { state, runtimes } = setup();
+    const res = handleAttack(state, runtimes, 'a', 1000, []);
+    expect(res.hits).toEqual([{ victim: 'v', damage: PUNCH_DAMAGE, x: 0, z: -1.5 }]);
+  });
+
+  it('жертва в безопасной зоне неуязвима (melee и ranged)', () => {
+    const { state, a, v, runtimes } = setup();
+    const zones = [{ x: 0, z: -1.5, w: 10, d: 10 }];
+    let res = handleAttack(state, runtimes, 'a', 1000, [], zones);
+    expect(v.hp).toBe(MAX_HP);
+    expect(res.hits).toHaveLength(0);
+    a.weapon = 'pistol'; a.ammo = 5; a.z = 10; // атакующий вне беззоны, жертва остаётся внутри
+    res = handleAttack(state, runtimes, 'a', 3000, [], zones);
+    expect(v.hp).toBe(MAX_HP);
+    expect(res.shot?.hit).toBe(false);
+  });
+
+  it('атакующий в безопасной зоне не бьёт наружу', () => {
+    const { state, runtimes } = setup();
+    const zones = [{ x: 0, z: 0, w: 4, d: 4 }]; // атакующий внутри
+    const res = handleAttack(state, runtimes, 'a', 1000, [], zones);
+    expect(res.swing).toBe(false);
+    expect(res.hits).toHaveLength(0);
+  });
+
+  it('зомби бьёт ZOMBIE_DAMAGE и не трогает других зомби', () => {
+    const { state, a, v, runtimes } = setup();
+    a.role = 'zombie';
+    handleAttack(state, runtimes, 'a', 1000, []);
+    expect(v.hp).toBe(MAX_HP - ZOMBIE_DAMAGE);
+    v.role = 'zombie';
+    const res = handleAttack(state, runtimes, 'a', 3000, []);
+    expect(res.hits).toHaveLength(0);
+  });
+
+  it('убийство зомби: kills растёт, розыска нет', () => {
+    const { state, a, v, runtimes } = setup();
+    v.role = 'zombie';
+    v.hp = PUNCH_DAMAGE;
+    handleAttack(state, runtimes, 'a', 1000, []);
+    expect(v.mode).toBe('dead');
+    expect(a.wantedUntil).toBe(0);
+    expect(runtimes.get('a')!.kills).toBe(1);
+  });
+
+  it('при убийстве доля наличных выпадает пикапом cash на месте смерти', () => {
+    const { state, v, runtimes } = setup();
+    v.cash = 400;
+    v.hp = PUNCH_DAMAGE;
+    handleAttack(state, runtimes, 'a', 1000, []);
+    expect(v.cash).toBe(200);
+    const drops = [...state.pickups.values()].filter(pk => pk.kind === 'cash');
+    expect(drops).toHaveLength(1);
+    expect(drops[0].amount).toBe(200);
+    expect(drops[0].x).toBe(0);
+    expect(drops[0].z).toBe(-1.5);
+  });
+
+  it('респаун всегда у больницы, даже с квартирой', () => {
+    const { state, v, runtimes } = setup();
+    v.hp = PUNCH_DAMAGE;
+    v.apt = 'apt1'; // раньше респаунило у своей двери
+    handleAttack(state, runtimes, 'a', 1000, []);
+    const map = createCityMap();
+    tickRespawn(state, runtimes, map, 1000 + RESPAWN_DELAY_MS + 1);
+    expect(v.mode).toBe('foot');
+    expect(v.x).toBe(map.hospitalDoor.x);
+    expect(v.z).toBe(map.hospitalDoor.z);
+  });
+
+  it('зомби воскресает на zombieSpawns с ZOMBIE_HP после ZOMBIE_RESPAWN_MS', () => {
+    const { state, v, runtimes } = setup();
+    v.role = 'zombie';
+    v.hp = PUNCH_DAMAGE;
+    handleAttack(state, runtimes, 'a', 1000, []);
+    const map = createCityMap();
+    tickRespawn(state, runtimes, map, 1000 + RESPAWN_DELAY_MS + 1);
+    expect(v.mode).toBe('dead'); // рано
+    tickRespawn(state, runtimes, map, 1000 + ZOMBIE_RESPAWN_MS + 1);
+    expect(v.mode).toBe('foot');
+    expect(v.hp).toBe(ZOMBIE_HP);
+    const onSpawn = map.zombieSpawns.some(s => s.x === v.x && s.z === v.z);
+    expect(onSpawn).toBe(true);
   });
 });

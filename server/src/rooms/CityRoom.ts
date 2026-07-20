@@ -1,6 +1,7 @@
 import { Room, type Client } from 'colyseus';
 import {
   TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
+  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY,
   createCityMap, dist2, type AABB, type CityMap,
 } from '@mmo/shared';
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
@@ -12,7 +13,8 @@ import { handleAttack, tickRespawn, type AttackResult } from '../systems/combat.
 import { spawnPickups, tickPickups, type PickupRuntime } from '../systems/pickups.js';
 import { spawnZombies, tickZombies } from '../systems/zombies.js';
 import { tickPolice } from '../systems/police.js';
-import { tryStartDelivery, tickDelivery } from '../systems/economy.js';
+import { tryStartDelivery, tickDelivery, tryTransfer, tryTakeJob, tryDropJob } from '../systems/economy.js';
+import { trySms } from '../systems/messages.js';
 import { tryRent, adjustSafe, tickRent } from '../systems/housing.js';
 import { tryBuyWeapon, tryBuyAmmo } from '../systems/shop.js';
 import { tryChat, type ChatMessage } from '../systems/chat.js';
@@ -106,6 +108,65 @@ export class CityRoom extends Room<GameState> {
       rt.lastChatHistAt = now;
       client.send('chatHistory', { items: this.chatLog });
     });
+    this.onMessage('sms', (client, data) => {
+      const res = trySms(this.state, this.runtimes, this.db, client.sessionId, data?.to, data?.text, Date.now());
+      if (res.error || !res.sms) {
+        client.send('smsResult', { ok: false, error: res.error });
+        return;
+      }
+      client.send('smsResult', { ok: true });
+      client.send('sms', res.sms); // эхо для своей ленты
+      const toId = this.findSessionByName(res.sms.to);
+      if (toId) this.clients.find(c => c.sessionId === toId)?.send('sms', res.sms);
+    });
+    this.onMessage('smsHistoryReq', (client) => {
+      const rt = this.runtimes.get(client.sessionId);
+      const p = this.state.players.get(client.sessionId);
+      const now = Date.now();
+      if (!rt || !p || now - rt.lastSmsHistAt < SMS_HISTORY_COOLDOWN_MS) return;
+      rt.lastSmsHistAt = now;
+      client.send('smsHistory', { dialogs: this.db.getDialogs(p.name) });
+    });
+    this.onMessage('smsThreadReq', (client, data) => {
+      const rt = this.runtimes.get(client.sessionId);
+      const p = this.state.players.get(client.sessionId);
+      const now = Date.now();
+      const withNick = String(data?.with ?? '').trim();
+      if (!rt || !p || !withNick || now - rt.lastSmsThreadAt < SMS_HISTORY_COOLDOWN_MS) return;
+      rt.lastSmsThreadAt = now;
+      client.send('smsThread', { with: withNick, items: this.db.getThread(p.name, withNick, SMS_THREAD_LIMIT) });
+    });
+    this.onMessage('smsRead', (client, data) => {
+      const p = this.state.players.get(client.sessionId);
+      const withNick = String(data?.with ?? '').trim();
+      if (!p || !withNick) return;
+      this.db.markRead(p.name, withNick);
+    });
+    this.onMessage('transfer', (client, data) => {
+      const res = tryTransfer(this.state, this.db, client.sessionId, data?.to, data?.amount, Date.now());
+      client.send('transferResult', { ok: res.ok, error: res.error, balance: res.balance });
+      if (res.ok && res.toNick && res.amount) {
+        const from = this.state.players.get(client.sessionId)?.name ?? '';
+        const toId = this.findSessionByName(res.toNick);
+        if (toId) this.clients.find(c => c.sessionId === toId)?.send('transferIn', { from, amount: res.amount });
+      }
+    });
+    this.onMessage('transferHistoryReq', (client) => {
+      const rt = this.runtimes.get(client.sessionId);
+      const p = this.state.players.get(client.sessionId);
+      const now = Date.now();
+      if (!rt || !p || now - rt.lastTransferHistAt < SMS_HISTORY_COOLDOWN_MS) return;
+      rt.lastTransferHistAt = now;
+      client.send('transferHistory', { items: this.db.getTransfers(p.name, TRANSFER_HISTORY) });
+    });
+    this.onMessage('jobTake', (client) => {
+      const ok = tryTakeJob(this.state, client.sessionId, this.map, Date.now());
+      client.send('jobResult', { ok, error: ok ? undefined : 'need_car' });
+    });
+    this.onMessage('jobDrop', (client) => {
+      const ok = tryDropJob(this.state, client.sessionId);
+      client.send('jobResult', { ok, error: ok ? undefined : 'no_job' });
+    });
   }
 
   onJoin(client: Client, options: { name?: string; role?: string }): void {
@@ -141,6 +202,7 @@ export class CityRoom extends Room<GameState> {
     rt.kills = rec.kills;
     rt.deaths = rec.deaths;
     this.runtimes.set(client.sessionId, rt);
+    client.send('smsInbox', { unread: this.db.unreadCount(name) });
   }
 
   async onLeave(client: Client, consented: boolean): Promise<void> {
@@ -183,6 +245,14 @@ export class CityRoom extends Room<GameState> {
     } catch (err) {
       console.error('[city] db save error', err);
     }
+  }
+
+  private findSessionByName(name: string): string | null {
+    let found: string | null = null;
+    this.state.players.forEach((pl, id) => {
+      if (!found && pl.name === name && pl.role !== 'zombie') found = id;
+    });
+    return found;
   }
 
   private broadcastAttack(res: AttackResult): void {

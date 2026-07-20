@@ -50,8 +50,9 @@ export function tickZombies(
     // цель: ближайший живой не-зомби пешеход вне беззоны
     let target: Player | null = null;
     let best = ZOMBIE_AGGRO_DIST * ZOMBIE_AGGRO_DIST;
-    state.players.forEach((p) => {
+    state.players.forEach((p, pid) => {
       if (p.role === 'zombie' || p.mode !== 'foot') return;
+      if (runtimes.get(pid)?.frozen) return; // не агримся на замороженного призрака
       if (inAnyAABB(p.x, p.z, map.safeZones)) return;
       const d2 = dist2(p.x, p.z, z.x, z.z);
       if (d2 < best) {

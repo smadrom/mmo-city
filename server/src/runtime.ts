@@ -30,6 +30,7 @@ export interface Runtime {
   deaths: number;
   nextWanderAt: number; // зомби: когда переслучить направление блуждания
   wanderRotY: number;
+  frozen: boolean;      // обрыв: призрак не симулируется/не эксплуатируется в окне реконнекта
 }
 
 export function makeRuntime(now: number): Runtime {
@@ -54,5 +55,6 @@ export function makeRuntime(now: number): Runtime {
     deaths: 0,
     nextWanderAt: 0,
     wanderRotY: 0,
+    frozen: false,
   };
 }

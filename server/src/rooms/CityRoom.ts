@@ -183,11 +183,17 @@ export class CityRoom extends Room<GameState> {
     if (!name) throw new Error('need_name');
     const auth = this.db.getAuth(name);
     if (auth.exists && auth.secret && options?.token !== auth.secret) throw new Error('bad_token');
+    // один активный сеанс на ник: онлайн-дубль отклоняем. Замороженный призрак — исключение:
+    // это реконнект владельца (токен уже проверен выше), его вытеснит onJoin.
+    const existingId = this.findSessionByName(name);
+    if (existingId && !this.runtimes.get(existingId)?.frozen) throw new Error('name_online');
     return { name };
   }
 
   onJoin(client: Client, options: { name?: string; role?: string }): void {
     const name = (client.auth as { name: string }).name;
+    const ghostId = this.findSessionByName(name); // вытесняем «призрака» реконнекта того же ника
+    if (ghostId) this.removePlayer(ghostId);
     let role: 'citizen' | 'cop' = options?.role === 'cop' ? 'cop' : 'citizen';
     if (role === 'cop') {
       let cops = 0;
@@ -233,7 +239,11 @@ export class CityRoom extends Room<GameState> {
   async onLeave(client: Client, consented: boolean): Promise<void> {
     try {
       if (consented) throw new Error('consented leave');
+      const rt = this.runtimes.get(client.sessionId);
+      if (rt) rt.frozen = true; // заморозить призрака на окно реконнекта (не двигается/не арестуется/не агрит зомби)
       await this.allowReconnection(client, 10);
+      const rt2 = this.runtimes.get(client.sessionId);
+      if (rt2) rt2.frozen = false; // настоящий colyseus-реконнект (если появится) — размораживаем
     } catch {
       this.removePlayer(client.sessionId);
     }

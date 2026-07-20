@@ -1,4 +1,4 @@
-import { CHAT_COOLDOWN_MS, CHAT_HISTORY_COOLDOWN_MS, COP_SALARY_INTERVAL_MS, RENT_INTERVAL_MS, SMS_COOLDOWN_MS, SMS_HISTORY_COOLDOWN_MS } from '@mmo/shared';
+import { CHAT_COOLDOWN_MS, CHAT_HISTORY_COOLDOWN_MS, COP_SALARY_INTERVAL_MS, RENT_INTERVAL_MS, SMS_COOLDOWN_MS, SMS_HISTORY_COOLDOWN_MS, WRITE_COOLDOWN_MS } from '@mmo/shared';
 
 export interface InputState {
   up: boolean;
@@ -18,6 +18,7 @@ export interface Runtime {
   lastSmsHistAt: number;
   lastSmsThreadAt: number;      // smsThreadReq — отдельный лимит, не конфликтует с smsHistoryReq
   lastTransferHistAt: number;   // transferHistoryReq — свой лимит
+  lastWriteAt: number;          // антиспам пишущих эндпоинтов: deposit/withdraw/transfer/smsRead
   lastDamageAt: number;
   arrestProgress: number; // мс, накопленные копом рядом
   respawnAt: number;
@@ -41,6 +42,7 @@ export function makeRuntime(now: number): Runtime {
     lastSmsHistAt: -SMS_HISTORY_COOLDOWN_MS,
     lastSmsThreadAt: -SMS_HISTORY_COOLDOWN_MS,
     lastTransferHistAt: -SMS_HISTORY_COOLDOWN_MS,
+    lastWriteAt: -WRITE_COOLDOWN_MS, // первый пишущий запрос проходит сразу
     lastDamageAt: 0,
     arrestProgress: 0,
     respawnAt: 0,

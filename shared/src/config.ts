@@ -88,6 +88,7 @@ export const SMS_HISTORY_COOLDOWN_MS = 5000; // как у chatHistoryReq
 export const TRANSFER_MIN = 1;
 export const TRANSFER_MAX = 100_000;
 export const TRANSFER_HISTORY = 10;
+export const WRITE_COOLDOWN_MS = 500; // антиспам дешёвых пишущих эндпоинтов: банк/переводы/smsRead
 
 export const MINIMAP_SIZE = 200;  // px, диаметр круга
 export const MINIMAP_RADIUS = 60; // метров обзора от центра

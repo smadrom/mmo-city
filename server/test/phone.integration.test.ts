@@ -147,6 +147,22 @@ describe('Телефон (integration)', () => {
     expect(p1.cash).toBe(50);
   });
 
+  it('deposit: дробная сумма floor-ится, спам в пределах cooldown игнорируется', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c = await testServer.connectTo(room, { name: 'saver', role: 'citizen' });
+    const p = room.state.players.get(c.sessionId);
+    const apt = [...room.state.apartments.values()][0] as any; // арендуем, ставим к двери
+    apt.rentedBy = 'saver'; p.apt = apt.id; p.x = apt.doorX; p.z = apt.doorZ; p.cash = 1000; p.safe = 0;
+    c.send('deposit', { amount: 0.9 }); // floor→0: сейф не меняется
+    await wait(600);                    // > WRITE_COOLDOWN_MS
+    expect(p.safe).toBe(0);
+    c.send('deposit', { amount: 100 }); // проходит
+    c.send('deposit', { amount: 100 }); // в пределах cooldown → игнор
+    await wait(200);
+    expect(p.safe).toBe(100);
+    expect(p.cash).toBe(900);
+  });
+
   it('transferHistory: свои переводы видны', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     const c1 = await testServer.connectTo(room, { name: 'th1', role: 'citizen' });

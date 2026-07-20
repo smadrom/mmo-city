@@ -2,7 +2,7 @@ import { Room, type Client } from 'colyseus';
 import { StateView } from '@colyseus/schema';
 import {
   TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
-  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY, RENT_INTERVAL_MS,
+  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY, RENT_INTERVAL_MS, WRITE_COOLDOWN_MS,
   createCityMap, dist2, type AABB, type CityMap,
 } from '@mmo/shared';
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
@@ -90,10 +90,12 @@ export class CityRoom extends Room<GameState> {
     });
     this.onMessage('interact', (client) => this.handleInteract(client));
     this.onMessage('deposit', (client, data) => {
-      adjustSafe(this.state, client.sessionId, Math.abs(Number(data?.amount) || 0));
+      if (this.writeRateLimited(client.sessionId)) return;
+      adjustSafe(this.state, client.sessionId, Math.floor(Math.abs(Number(data?.amount) || 0)));
     });
     this.onMessage('withdraw', (client, data) => {
-      adjustSafe(this.state, client.sessionId, -Math.abs(Number(data?.amount) || 0));
+      if (this.writeRateLimited(client.sessionId)) return;
+      adjustSafe(this.state, client.sessionId, -Math.floor(Math.abs(Number(data?.amount) || 0)));
     });
     this.onMessage('chat', (client, data) => {
       const msg = tryChat(this.state, this.runtimes, client.sessionId, data?.text, Date.now());
@@ -138,12 +140,14 @@ export class CityRoom extends Room<GameState> {
       client.send('smsThread', { with: withNick, items: this.db.getThread(p.name, withNick, SMS_THREAD_LIMIT) });
     });
     this.onMessage('smsRead', (client, data) => {
+      if (this.writeRateLimited(client.sessionId)) return;
       const p = this.state.players.get(client.sessionId);
       const withNick = String(data?.with ?? '').trim();
       if (!p || !withNick) return;
       this.db.markRead(p.name, withNick);
     });
     this.onMessage('transfer', (client, data) => {
+      if (this.writeRateLimited(client.sessionId)) return;
       this.savePlayer(client.sessionId); // синк БД с авторитетной памятью: иначе db.transfer (WHERE cash>=amount) даёт ложный no_money после свежего заработка
       const res = tryTransfer(this.state, this.db, client.sessionId, data?.to, data?.amount, Date.now());
       client.send('transferResult', { ok: res.ok, error: res.error, balance: res.balance });
@@ -265,6 +269,16 @@ export class CityRoom extends Room<GameState> {
     } catch (err) {
       console.error('[city] db save error', err);
     }
+  }
+
+  // антиспам дешёвых пишущих эндпоинтов (deposit/withdraw/transfer/smsRead)
+  private writeRateLimited(id: string): boolean {
+    const rt = this.runtimes.get(id);
+    if (!rt) return true;
+    const now = Date.now();
+    if (now - rt.lastWriteAt < WRITE_COOLDOWN_MS) return true;
+    rt.lastWriteAt = now;
+    return false;
   }
 
   private findSessionByName(name: string): string | null {

@@ -56,7 +56,7 @@ function bootGame(room: Room): void {
   const map = buildWorld(scene);
   const avatars = new Avatars(scene, room);
   const input = new InputController(room, renderer.domElement);
-  const ui = new UI(room, map, avatars);
+  const ui = new UI(room, map, avatars, input);
   const effects = new Effects(scene, room, avatars);
 
   window.addEventListener('resize', () => {

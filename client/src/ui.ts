@@ -5,6 +5,7 @@ import {
 } from '@mmo/shared';
 import type { Room } from 'colyseus.js';
 import type { Avatars } from './avatars.js';
+import type { InputController } from './input.js';
 
 export class UI {
   private stats = document.getElementById('stats')!;
@@ -16,10 +17,11 @@ export class UI {
   private toastTimer = 0;
   private chat = document.getElementById('chat')!;
   private chatInput = document.getElementById('chatInput') as HTMLInputElement;
+  private crosshair = document.getElementById('crosshair')!;
   private seenChat = new Set<string>();
   private seenChatQueue: string[] = [];
 
-  constructor(private room: Room, private map: CityMap, private avatars: Avatars) {
+  constructor(private room: Room, private map: CityMap, private avatars: Avatars, private input: InputController) {
     this.chatInput.maxLength = CHAT_MAX_LEN; // лимит из общего конфига, не из HTML
     room.onMessage('openSafe', () => this.safeDialog.classList.remove('hidden'));
     document.getElementById('safeClose')!.addEventListener('click', () => this.safeDialog.classList.add('hidden'));
@@ -127,6 +129,13 @@ export class UI {
     const me = this.me();
     if (!me) return;
     const nowServer = this.avatars.serverNow();
+
+    const dialogsClosed = this.safeDialog.classList.contains('hidden')
+      && this.shopDialog.classList.contains('hidden')
+      && this.chatInput.classList.contains('hidden');
+    const showCross = this.input.aiming && document.pointerLockElement !== null
+      && me.mode !== 'dead' && dialogsClosed;
+    this.crosshair.classList.toggle('hidden', !showCross);
 
     const roleRu = me.role === 'cop' ? 'Полицейский' : 'Гражданин';
     const w = me.weapon && Object.hasOwn(WEAPONS, me.weapon) ? WEAPONS[me.weapon as WeaponKind] : null;

@@ -8,18 +8,24 @@ const VIGNETTE_MS = 150;
 const SHOT_SOUND_DIST = 60; // дальше этого радиуса щелчок не играем
 
 interface Tracer { line: THREE.Line; bornAt: number }
+interface DamageNumber { sprite: THREE.Sprite; bornAt: number }
+const DAMAGE_MS = 700;
 
 export class Effects {
   private tracers: Tracer[] = [];
+  private damageNumbers: DamageNumber[] = [];
   private vignette = document.getElementById('vignette')!;
   private vignetteTimer = 0;
   private audio: AudioContext | null = null;
 
   constructor(private scene: THREE.Scene, private room: Room, private avatars: Avatars) {
     room.onMessage('shot', (msg: any) => this.onShot(room.sessionId, msg));
+    room.onMessage('hit', (msg: any) => this.onHit(msg));
+    room.onMessage('swing', (msg: any) => this.avatars.playSwing(msg.player));
   }
 
-  private onShot(myId: string, msg: { from: { x: number; z: number }; to: { x: number; z: number }; victim: string }): void {
+  private onShot(myId: string, msg: { from: { x: number; z: number }; to: { x: number; z: number }; victim: string; attacker?: string }): void {
+    if (msg.attacker) this.avatars.playRecoil(msg.attacker);
     // сервер шлёт raw-позицию жертвы — она опережает интерполированный меш на ~120 мс;
     // рисуем конец tracer'а в меш, если он есть (спека: попадание должно попадать в видимую модель)
     const to = (msg.victim && this.avatars.meshPos(msg.victim)) || msg.to;
@@ -53,6 +59,26 @@ export class Effects {
     } catch { /* звук опционален, без него играбельно */ }
   }
 
+  private onHit(msg: { victim: string; damage: number; x: number; z: number }): void {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    ctx.font = 'bold 44px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.strokeText(`-${msg.damage}`, 64, 32);
+    ctx.fillStyle = '#ff5544';
+    ctx.fillText(`-${msg.damage}`, 64, 32);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+    sprite.scale.set(1.4, 0.7, 1);
+    sprite.position.set(msg.x + (Math.random() - 0.5) * 0.6, 2.3, msg.z);
+    this.scene.add(sprite);
+    this.damageNumbers.push({ sprite, bornAt: performance.now() });
+  }
+
   update(): void {
     const now = performance.now();
     for (let i = this.tracers.length - 1; i >= 0; i--) {
@@ -65,6 +91,20 @@ export class Effects {
         this.tracers.splice(i, 1);
       } else {
         (t.line.material as THREE.LineBasicMaterial).opacity = k;
+      }
+    }
+    for (let i = this.damageNumbers.length - 1; i >= 0; i--) {
+      const d = this.damageNumbers[i];
+      const t = (now - d.bornAt) / DAMAGE_MS;
+      if (t >= 1) {
+        this.scene.remove(d.sprite);
+        const m = d.sprite.material as THREE.SpriteMaterial;
+        m.map?.dispose();
+        m.dispose();
+        this.damageNumbers.splice(i, 1);
+      } else {
+        d.sprite.position.y = 2.3 + t * 0.7;
+        (d.sprite.material as THREE.SpriteMaterial).opacity = 1 - t;
       }
     }
   }

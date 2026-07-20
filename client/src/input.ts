@@ -3,6 +3,7 @@ import type { MoveInput } from '@mmo/shared';
 
 export class InputController {
   yaw = 0;
+  aiming = false;
   // текущее состояние ввода — читается предсказанием каждый кадр (refresh)
   readonly current: MoveInput = { up: false, down: false, left: false, right: false, sprint: false, rotY: 0 };
   private keys = new Set<string>();
@@ -20,7 +21,7 @@ export class InputController {
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     // потеря фокуса окна/вкладки — keyup не приходит, клавиши «залипают» → сброс
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => { this.keys.clear(); this.aiming = false; });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.keys.clear();
     });
@@ -32,6 +33,9 @@ export class InputController {
     window.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement === dom) this.yaw -= e.movementX * 0.003;
     });
+    dom.addEventListener('mousedown', (e) => { if (e.button === 2) this.aiming = true; });
+    window.addEventListener('mouseup', (e) => { if (e.button === 2) this.aiming = false; });
+    dom.addEventListener('contextmenu', (e) => e.preventDefault()); // без меню по ПКМ
 
     setInterval(() => {
       if (this.isTyping()) this.keys.clear(); // стоим, пока печатаем

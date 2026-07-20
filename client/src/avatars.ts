@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS, type WeaponKind } from '@mmo/shared';
+import { WEAPONS, MAX_HP, type WeaponKind } from '@mmo/shared';
 import { getStateCallbacks, type Room } from 'colyseus.js';
 
 interface PlayerMesh {
@@ -10,6 +10,12 @@ interface PlayerMesh {
   gun: THREE.Mesh;
   fistL: THREE.Mesh;
   fistR: THREE.Mesh;
+  bat: THREE.Mesh;
+  hpBg: THREE.Sprite;
+  hpFg: THREE.Sprite;
+  flash: THREE.Sprite;
+  swingAt: number;
+  recoilAt: number;
 }
 
 // интерполяция: рендерим чужих с задержкой INTERP_DELAY_MS по буферу снапшотов
@@ -56,14 +62,14 @@ function makeNameLabel(name: string, role: string): THREE.Sprite {
   const ctx = canvas.getContext('2d')!;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const roleRu = role === 'cop' ? 'Полицейский' : 'Гражданин';
+  const roleRu = role === 'cop' ? 'Полицейский' : role === 'zombie' ? 'Зомби' : 'Гражданин';
   ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
   ctx.fillRect(3, 6, 250, 84);
   ctx.font = 'bold 32px sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.fillText(name, 128, 32, 236);
   ctx.font = '26px sans-serif';
-  ctx.fillStyle = role === 'cop' ? '#77aaff' : '#bbbbbb';
+  ctx.fillStyle = role === 'cop' ? '#77aaff' : role === 'zombie' ? '#77cc66' : '#bbbbbb';
   ctx.fillText(roleRu, 128, 68, 236);
   const texture = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
@@ -109,7 +115,27 @@ function makePlayerMesh(name: string, role: string): PlayerMesh {
   const fistR = new THREE.Mesh(fistGeo, fistMat);
   fistR.position.set(0.55, 1.2, -0.15);
   group.add(fistR);
-  return { group, body, head, marker, gun, fistL, fistR };
+  const bat = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.8),
+    new THREE.MeshLambertMaterial({ color: 0x8b5a2b }),
+  );
+  bat.position.set(0.55, 1.2, -0.2);
+  bat.visible = false;
+  group.add(bat);
+  const hpBg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x222222 }));
+  hpBg.scale.set(1.2, 0.12, 1);
+  hpBg.position.y = 2.12;
+  group.add(hpBg);
+  const hpFg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x33cc33 }));
+  hpFg.scale.set(1.2, 0.12, 1);
+  hpFg.position.y = 2.13;
+  group.add(hpFg);
+  const flash = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffee88, transparent: true }));
+  flash.scale.set(0.5, 0.5, 1);
+  flash.position.set(0, 0, -0.45); // у дула (дочерний к gun)
+  flash.visible = false;
+  gun.add(flash);
+  return { group, body, head, marker, gun, fistL, fistR, bat, hpBg, hpFg, flash, swingAt: 0, recoilAt: 0 };
 }
 
 function makeCarMesh(): THREE.Group {
@@ -205,6 +231,16 @@ export class Avatars {
     return { x: mesh.group.position.x, z: mesh.group.position.z };
   }
 
+  playSwing(id: string): void {
+    const mesh = this.players.get(id);
+    if (mesh) mesh.swingAt = performance.now();
+  }
+
+  playRecoil(id: string): void {
+    const mesh = this.players.get(id);
+    if (mesh) mesh.recoilAt = performance.now();
+  }
+
   update(_dt: number): void {
     const nowServer = this.serverNow();
     const rt = nowServer - INTERP_DELAY_MS;
@@ -227,7 +263,7 @@ export class Avatars {
           mesh.group.rotation.y = s.rotY;
         }
       }
-      (mesh.body.material as THREE.MeshLambertMaterial).color.set(p.role === 'cop' ? 0x2244ff : 0x888888);
+      (mesh.body.material as THREE.MeshLambertMaterial).color.set(p.role === 'cop' ? 0x2244ff : p.role === 'zombie' ? 0x33aa33 : 0x888888);
       mesh.marker.visible = iAmCop && p.wantedUntil > nowServer;
       mesh.group.visible = p.mode !== 'dead';
       // в машине прячем только тело — табличка остаётся над машиной
@@ -240,6 +276,26 @@ export class Avatars {
       mesh.fistR.visible = handsFree;
       const w = p.weapon && Object.hasOwn(WEAPONS, p.weapon) ? WEAPONS[p.weapon as WeaponKind] : null;
       mesh.gun.visible = onFoot && w?.ranged === true;
+      mesh.bat.visible = onFoot && p.weapon === 'bat';
+      // HP-полоска — над чужими живыми пешеходами (у себя HP в HUD)
+      const showHp = id !== this.room.sessionId && p.mode === 'foot';
+      mesh.hpBg.visible = showHp;
+      mesh.hpFg.visible = showHp;
+      if (showHp) {
+        const k = Math.max(0, Math.min(1, p.hp / MAX_HP));
+        mesh.hpFg.scale.x = 1.2 * k;
+        mesh.hpFg.position.x = -1.2 * (1 - k) / 2; // левый край зафиксирован
+        (mesh.hpFg.material as THREE.SpriteMaterial).color.set(k > 0.5 ? 0x33cc33 : k > 0.25 ? 0xddaa22 : 0xcc2222);
+      }
+      // замах (150 мс): правая рука/бита вперёд-назад
+      const st = (performance.now() - mesh.swingAt) / 150;
+      const swingZ = st < 1 ? Math.sin(st * Math.PI) * 0.6 : 0;
+      mesh.fistR.position.z = -0.15 - swingZ;
+      mesh.bat.position.z = -0.2 - swingZ;
+      // отдача (80 мс): ствол назад + вспышка у дула
+      const rc = (performance.now() - mesh.recoilAt) / 80;
+      mesh.gun.position.z = -0.35 + (rc < 1 ? Math.sin(rc * Math.PI) * 0.15 : 0);
+      mesh.flash.visible = rc < 0.75;
     });
 
     this.cars.forEach((mesh, id) => {

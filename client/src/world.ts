@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCityMap, ROADS, ROAD_WIDTH, MAP_HALF, type CityMap, type Point, type BuildingDef } from '@mmo/shared';
+import { createCityMap, ROADS, ROAD_WIDTH, MAP_HALF, TARGET_LABELS, type CityMap, type Point, type BuildingDef } from '@mmo/shared';
 
 const KIND_LABELS: Record<BuildingDef['kind'], string> = {
   hospital: 'Больница',
@@ -105,19 +105,26 @@ export function buildWorld(scene: THREE.Scene): CityMap {
     scene.add(m);
   }
 
-  const mark = (p: Point, color: number, size = 3) => {
+  const mark = (p: Point, color: number) => {
     const m = new THREE.Mesh(
-      new THREE.CylinderGeometry(size, size, 0.2, 24),
-      new THREE.MeshLambertMaterial({ color }),
+      new THREE.CylinderGeometry(1.2, 1.2, 1.6, 24, 1, true),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }),
     );
-    m.position.set(p.x, 0.1, p.z);
+    m.position.set(p.x, 0.8, p.z);
     scene.add(m);
+    const ring = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.2, 1.2, 0.05, 24),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6 }),
+    );
+    ring.position.set(p.x, 0.03, p.z);
+    scene.add(ring);
   };
   mark(map.warehouse, 0xff8800);
   mark(map.gunShop, 0xcc44ff);
   for (const t of map.deliveryTargets) mark(t, 0x00cccc);
-  mark(map.hospitalDoor, 0xffffff, 2);
-  mark(map.policeDoor, 0x2244ff, 2);
+  mark(map.hospitalDoor, 0xffffff);
+  mark(map.policeDoor, 0x2244ff);
+  for (const a of map.apartments) mark(a, 0xffcc00);
 
   const poi = (p: Point, text: string) => {
     const label = makeTextSprite(text);
@@ -125,8 +132,45 @@ export function buildWorld(scene: THREE.Scene): CityMap {
     scene.add(label);
   };
   poi(map.gunShop, 'Оружейный магазин');
-  const TARGET_LABELS: Record<string, string> = { shop: 'Магазин', gas: 'Заправка', port: 'Порт' };
   for (const t of map.deliveryTargets) poi(t, TARGET_LABELS[t.id] ?? t.id);
+
+  // забор вокруг безопасных зон, ворота — южная грань (к дороге)
+  const fenceMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
+  for (const z of map.safeZones) {
+    const minX = z.x - z.w / 2;
+    const maxX = z.x + z.w / 2;
+    const minZ = z.z - z.d / 2;
+    const maxZ = z.z + z.d / 2;
+    const seg = (x: number, zz: number, w: number, d: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), fenceMat);
+      m.position.set(x, 0.6, zz);
+      scene.add(m);
+    };
+    for (let x = minX + 1; x <= maxX - 1; x += 2) {
+      seg(x, minZ, 2, 0.15);
+      if (Math.abs(x - z.x) > 3) seg(x, maxZ, 2, 0.15); // ворота
+    }
+    for (let zz = minZ + 1; zz <= maxZ - 1; zz += 2) {
+      seg(minX, zz, 0.15, 2);
+      seg(maxX, zz, 0.15, 2);
+    }
+    const zoneLabel = makeTextSprite('Безопасная зона');
+    zoneLabel.position.set(z.x, 4, z.z);
+    scene.add(zoneLabel);
+  }
+
+  // кладбище у первой точки спавна зомби
+  const grave = map.zombieSpawns[0];
+  const yard = new THREE.Mesh(
+    new THREE.PlaneGeometry(30, 30),
+    new THREE.MeshLambertMaterial({ color: 0x2f2f26 }),
+  );
+  yard.rotation.x = -Math.PI / 2;
+  yard.position.set(grave.x, 0.04, grave.z);
+  scene.add(yard);
+  const graveLabel = makeTextSprite('Кладбище');
+  graveLabel.position.set(grave.x, 5, grave.z);
+  scene.add(graveLabel);
 
   return map;
 }

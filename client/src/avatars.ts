@@ -138,7 +138,11 @@ function makePlayerMesh(name: string, role: string): PlayerMesh {
   return { group, body, head, marker, gun, fistL, fistR, bat, hpBg, hpFg, flash, swingAt: 0, recoilAt: 0 };
 }
 
-function makeCarMesh(): THREE.Group {
+interface CarMesh { group: THREE.Group; wheelFL: THREE.Group; wheelFR: THREE.Group; wheels: THREE.Mesh[] }
+
+const WHEEL_AXIS_Y = new THREE.Vector3(0, 1, 0);
+
+function makeCarMesh(): CarMesh {
   const group = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(2, 0.7, 4),
@@ -154,13 +158,24 @@ function makeCarMesh(): THREE.Group {
   group.add(cabin);
   const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 10);
   const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+  const spokeMat = new THREE.MeshLambertMaterial({ color: 0x999999 });
+  const wheels: THREE.Mesh[] = [];
+  let wheelFL = new THREE.Group();
+  let wheelFR = new THREE.Group();
   for (const [wx, wz] of [[-1, -1.3], [1, -1.3], [-1, 1.3], [1, 1.3]] as const) {
+    const mount = new THREE.Group();
+    mount.position.set(wx, 0.35, wz);
     const wheel = new THREE.Mesh(wheelGeo, wheelMat);
     wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(wx, 0.35, wz);
-    group.add(wheel);
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.1), spokeMat); // чтобы вращение читалось
+    wheel.add(spoke);
+    mount.add(wheel);
+    group.add(mount);
+    wheels.push(wheel);
+    if (wz < 0 && wx < 0) wheelFL = mount; // перед — отрицательный z (нос машины)
+    if (wz < 0 && wx > 0) wheelFR = mount;
   }
-  return group;
+  return { group, wheelFL, wheelFR, wheels };
 }
 
 export class Avatars {
@@ -170,7 +185,7 @@ export class Avatars {
   // предсказанная позиция себя (пешком); null — едем по серверному state
   selfPos: { x: number; z: number } | null = null;
   private players = new Map<string, PlayerMesh>();
-  private cars = new Map<string, THREE.Group>();
+  private cars = new Map<string, CarMesh>();
   private playerSnaps = new Map<string, Snap[]>();
   private carSnaps = new Map<string, Snap[]>();
 
@@ -204,16 +219,16 @@ export class Avatars {
     });
     $(room.state).cars.onAdd((c: any, id: string) => {
       const mesh = makeCarMesh();
-      mesh.position.set(c.x, 0, c.z);
-      mesh.rotation.y = c.rotY;
+      mesh.group.position.set(c.x, 0, c.z);
+      mesh.group.rotation.y = c.rotY;
       this.cars.set(id, mesh);
       this.carSnaps.set(id, []);
-      scene.add(mesh);
+      scene.add(mesh.group);
     });
     $(room.state).cars.onRemove((_c: any, id: string) => {
       const mesh = this.cars.get(id);
       if (mesh) {
-        scene.remove(mesh);
+        scene.remove(mesh.group);
         this.cars.delete(id);
         this.carSnaps.delete(id);
       }
@@ -241,7 +256,7 @@ export class Avatars {
     if (mesh) mesh.recoilAt = performance.now();
   }
 
-  update(_dt: number): void {
+  update(dt: number): void {
     const nowServer = this.serverNow();
     const rt = nowServer - INTERP_DELAY_MS;
     // красные маркеры розыска над головами показываем только копам
@@ -301,17 +316,20 @@ export class Avatars {
     this.cars.forEach((mesh, id) => {
       const c = (this.room.state.cars as any).get(id);
       if (!c) return;
+      mesh.wheelFL.rotation.y = c.steer * 0.5;
+      mesh.wheelFR.rotation.y = c.steer * 0.5;
+      const angle = (c.speed * dt) / 0.35; // r колеса 0.35
+      for (const w of mesh.wheels) w.rotateOnAxis(WHEEL_AXIS_Y, angle);
       if (c.driverId === this.room.sessionId) {
-        // свою машину не интерполируем
-        mesh.position.set(c.x, 0, c.z);
-        mesh.rotation.y = c.rotY;
+        mesh.group.position.set(c.x, 0, c.z);
+        mesh.group.rotation.y = c.rotY;
       } else {
         const buf = this.carSnaps.get(id)!;
         pushSnap(buf, nowServer, c.x, c.z, c.rotY);
         const s = sampleSnap(buf, rt);
         if (s) {
-          mesh.position.set(s.x, 0, s.z);
-          mesh.rotation.y = s.rotY;
+          mesh.group.position.set(s.x, 0, s.z);
+          mesh.group.rotation.y = s.rotY;
         }
       }
     });

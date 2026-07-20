@@ -7,6 +7,7 @@ import { Prediction } from './prediction.js';
 import { updateCamera } from './camera.js';
 import { UI } from './ui.js';
 import { Effects } from './effects.js';
+import { Pickups } from './pickups.js';
 import type { Room } from 'colyseus.js';
 
 const joinScreen = document.getElementById('join')!;
@@ -58,6 +59,7 @@ function bootGame(room: Room): void {
   const input = new InputController(room, renderer.domElement);
   const ui = new UI(room, map, avatars, input);
   const effects = new Effects(scene, room, avatars);
+  const pickups = new Pickups(scene, room);
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -78,6 +80,7 @@ function bootGame(room: Room): void {
     }
     avatars.update(dt);
     effects.update();
+    pickups.update();
     ui.update();
     renderer.render(scene, camera);
   });

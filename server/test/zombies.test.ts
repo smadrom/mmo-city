@@ -91,6 +91,15 @@ describe('зомби', () => {
     expect(other.hp).toBe(MAX_HP);
   });
 
+  it('зомби не регенит выше ZOMBIE_HP', () => {
+    const { state, runtimes } = setup();
+    const [, z] = firstZombie(state);
+    expect(z.hp).toBe(ZOMBIE_HP);
+    // прошло достаточно времени без урона — реген игроков бы сработал
+    tickMovement(state, runtimes, [], 0.05, 60_000);
+    expect(z.hp).toBe(ZOMBIE_HP);
+  });
+
   it('зомби выталкивается из безопасной зоны', () => {
     const { state, runtimes } = setup();
     const [, z] = firstZombie(state);

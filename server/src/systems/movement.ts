@@ -1,6 +1,6 @@
 import {
   MAX_HP, HP_REGEN_PER_SEC, HP_REGEN_DELAY_MS,
-  ZOMBIE_SPEED, PLAYER_SPEED,
+  ZOMBIE_SPEED, PLAYER_SPEED, ZOMBIE_HP,
   stepFoot, type AABB,
 } from '@mmo/shared';
 import type { GameState } from '../schema/GameState.js';
@@ -25,8 +25,9 @@ export function tickMovement(
       p.rotY = rt.input.rotY;
     }
 
-    if (p.mode !== 'dead' && p.hp < MAX_HP && now - rt.lastDamageAt > HP_REGEN_DELAY_MS) {
-      p.hp = Math.min(MAX_HP, p.hp + HP_REGEN_PER_SEC * dt);
+    const maxHp = p.role === 'zombie' ? ZOMBIE_HP : MAX_HP;
+    if (p.mode !== 'dead' && p.hp < maxHp && now - rt.lastDamageAt > HP_REGEN_DELAY_MS) {
+      p.hp = Math.min(maxHp, p.hp + HP_REGEN_PER_SEC * dt);
     }
   });
 }

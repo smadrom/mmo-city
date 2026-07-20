@@ -130,7 +130,7 @@ export function killPlayer(
   if (killerId && killerId !== victimId) {
     const killer = state.players.get(killerId);
     const krt = runtimes.get(killerId);
-    if (killer && victim.role !== 'zombie') killer.wantedUntil = now + WANTED_DURATION_MS; // за зомби розыска нет
+    if (killer && killer.role !== 'zombie' && victim.role !== 'zombie') killer.wantedUntil = now + WANTED_DURATION_MS; // зомби розыск не получают и за зомби розыска нет
     if (krt) krt.kills++;
   }
 }

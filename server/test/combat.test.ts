@@ -240,6 +240,15 @@ describe('бой', () => {
     expect(runtimes.get('a')!.kills).toBe(1);
   });
 
+  it('зомби убивает игрока: розыск зомби не выставляется', () => {
+    const { state, a, v, runtimes } = setup();
+    a.role = 'zombie';
+    v.hp = ZOMBIE_DAMAGE;
+    handleAttack(state, runtimes, 'a', 1000, []);
+    expect(v.mode).toBe('dead');
+    expect(a.wantedUntil).toBe(0);
+  });
+
   it('при убийстве доля наличных выпадает пикапом cash на месте смерти', () => {
     const { state, v, runtimes } = setup();
     v.cash = 400;

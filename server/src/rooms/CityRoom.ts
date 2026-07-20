@@ -2,7 +2,7 @@ import { Room, type Client } from 'colyseus';
 import { StateView } from '@colyseus/schema';
 import {
   TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
-  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY, RENT_INTERVAL_MS, WRITE_COOLDOWN_MS,
+  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY, RENT_INTERVAL_MS, WRITE_COOLDOWN_MS, PROTOCOL_VERSION,
   createCityMap, dist2, type AABB, type CityMap,
 } from '@mmo/shared';
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
@@ -176,7 +176,9 @@ export class CityRoom extends Room<GameState> {
   }
 
   // аутентификация: ник + секрет-токен. Существующий заклеймённый ник требует верный token.
-  onAuth(_client: Client, options: { name?: string; token?: string }): { name: string } {
+  onAuth(_client: Client, options: { name?: string; token?: string; ver?: number }): { name: string } {
+    // хендшейк версии: присланный, но несовпадающий ver отклоняем (устаревший клиент после бампа схемы)
+    if (options?.ver !== undefined && options.ver !== PROTOCOL_VERSION) throw new Error('bad_version');
     const name = String(options?.name ?? '').slice(0, 16);
     if (!name) throw new Error('need_name');
     const auth = this.db.getAuth(name);

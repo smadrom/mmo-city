@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Server } from 'colyseus';
-import { createCityMap, CAR_ENTER_DIST, ZOMBIE_COUNT, PUNCH_DAMAGE } from '@mmo/shared';
+import { createCityMap, CAR_ENTER_DIST, ZOMBIE_COUNT, PUNCH_DAMAGE, PROTOCOL_VERSION } from '@mmo/shared';
 import { CityRoom } from '../src/rooms/CityRoom.js';
 import type { GameState } from '../src/schema/GameState.js';
 
@@ -317,5 +317,13 @@ describe('CityRoom (integration)', () => {
     await new Promise(r => setTimeout(r, 200));
     const c2 = await testServer.connectTo(room, { name: 'tenant', role: 'citizen', token: tok });
     expect((room as any).runtimes.get(c2.sessionId).nextRentAt).toBe(1000); // не сброшен релогом
+  });
+
+  it('версия протокола: несовпадающий ver отклоняется, текущий — проходит', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    await testServer.connectTo(room, { name: 'verAnchor', role: 'citizen' }); // держит комнату (иначе autoDispose)
+    await expect(testServer.connectTo(room, { name: 'verbad', role: 'citizen', ver: 999 })).rejects.toThrow();
+    const ok = await testServer.connectTo(room, { name: 'vergood', role: 'citizen', ver: PROTOCOL_VERSION });
+    expect(room.state.players.get(ok.sessionId).name).toBe('vergood');
   });
 });

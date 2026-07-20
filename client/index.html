@@ -42,6 +42,41 @@
     <canvas id="minimap" width="200" height="200"></canvas>
     <canvas id="fullmap" class="hidden"></canvas>
     <div id="phoneHint">P — телефон <span id="smsBadge" class="badge hidden"></span></div>
+    <div id="phone" class="hidden">
+      <div id="phoneHome">
+        <div id="phoneClock">--:--</div>
+        <button class="phoneApp" data-app="sms">SMS <span id="phoneSmsBadge" class="badge hidden"></span></button>
+        <button class="phoneApp" data-app="bank">Банк</button>
+        <button class="phoneApp" data-app="job">Работа</button>
+      </div>
+      <div id="appSms" class="phoneScreen hidden">
+        <div class="phoneBar"><button class="phoneBack">←</button><span>SMS</span><button id="smsNew">+</button></div>
+        <div id="smsNewForm" class="hidden">
+          <input id="smsNewTo" maxlength="16" placeholder="Ник получателя" /><button id="smsNewGo">→</button>
+        </div>
+        <div id="smsDialogs"></div>
+      </div>
+      <div id="appThread" class="phoneScreen hidden">
+        <div class="phoneBar"><button class="phoneBack">←</button><span id="threadTitle"></span></div>
+        <div id="threadMsgs"></div>
+        <div id="threadForm"><input id="threadInput" maxlength="140" placeholder="SMS…" /><button id="threadSend">→</button></div>
+      </div>
+      <div id="appBank" class="phoneScreen hidden">
+        <div class="phoneBar"><button class="phoneBack">←</button><span>Банк</span></div>
+        <div id="bankBalance"></div>
+        <div id="transferForm">
+          <input id="transferTo" maxlength="16" placeholder="Ник" />
+          <input id="transferAmount" inputmode="numeric" placeholder="Сумма" />
+          <button id="transferBtn">Перевести</button>
+        </div>
+        <div id="transferList"></div>
+      </div>
+      <div id="appJob" class="phoneScreen hidden">
+        <div class="phoneBar"><button class="phoneBack">←</button><span>Работа</span></div>
+        <div id="jobInfo"></div>
+        <button id="jobBtn"></button>
+      </div>
+    </div>
     <div id="vignette" class="hidden"></div>
   </div>
 

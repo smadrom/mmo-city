@@ -124,7 +124,7 @@ export class UI {
     return (this.room.state.players as any).get(this.room.sessionId);
   }
 
-  private showToast(text: string): void {
+  showToast(text: string): void {
     this.toast.textContent = text;
     this.toast.classList.remove('hidden');
     clearTimeout(this.toastTimer);

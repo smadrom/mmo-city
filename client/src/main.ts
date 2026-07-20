@@ -10,6 +10,7 @@ import { Effects } from './effects.js';
 import { Pickups } from './pickups.js';
 import { CityMapRenderer, type MapMarker } from './minimap.js';
 import { Fullmap } from './fullmap.js';
+import { Phone } from './phone.js';
 import type { Room } from 'colyseus.js';
 
 const joinScreen = document.getElementById('join')!;
@@ -64,6 +65,9 @@ function bootGame(room: Room): void {
   const pickups = new Pickups(scene, room);
   const mapRenderer = new CityMapRenderer(map);
   const fullmap = new Fullmap(mapRenderer, input);
+  const phone = new Phone(room, input, (t) => ui.showToast(t), () => avatars.serverNow());
+  phone.onOpen = () => fullmap.close();
+  fullmap.onOpen = () => phone.close();
   const minimapCanvas = document.getElementById('minimap') as HTMLCanvasElement;
   let lastCarId = '';
 
@@ -107,6 +111,7 @@ function bootGame(room: Room): void {
       };
       mapRenderer.renderMinimap(minimapCanvas, selfView, markers);
       fullmap.render(selfView, markers);
+      phone.update();
     }
     renderer.render(scene, camera);
   });

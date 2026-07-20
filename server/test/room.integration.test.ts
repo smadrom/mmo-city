@@ -89,11 +89,14 @@ describe('CityRoom (integration)', () => {
     // якорный клиент держит комнату (и её in-memory БД) живой между подключениями
     await testServer.connectTo(room, { name: 'anchor', role: 'citizen' });
     const c1 = await testServer.connectTo(room, { name: 'persist1', role: 'citizen' });
+    let tok = '';
+    c1.onMessage('authToken', (m: any) => { tok = m.token; });
+    await new Promise(r => setTimeout(r, 150));
     room.state.players.get(c1.sessionId).cash = 1234;
     await c1.leave();
     await new Promise(r => setTimeout(r, 200));
     expect(room.state.players.has(c1.sessionId)).toBe(false);
-    const c2 = await testServer.connectTo(room, { name: 'persist1', role: 'citizen' });
+    const c2 = await testServer.connectTo(room, { name: 'persist1', role: 'citizen', token: tok });
     expect(room.state.players.get(c2.sessionId).cash).toBe(1234);
   });
 
@@ -282,5 +285,22 @@ describe('CityRoom (integration)', () => {
     expect(otherOnA.ammo).toBeUndefined();
     // публичные поля чужого игрока при этом видны
     expect(otherOnA.name).toBe('viewB');
+  });
+
+  it('auth: чужой под тем же ником без токена отклоняется, с токеном — проходит', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    await testServer.connectTo(room, { name: 'anchorAuth', role: 'citizen' }); // держит комнату/БД
+    const owner = await testServer.connectTo(room, { name: 'acc1', role: 'citizen' });
+    let tok = '';
+    owner.onMessage('authToken', (m: any) => { tok = m.token; });
+    await new Promise(r => setTimeout(r, 150));
+    expect(tok).toBeTruthy();
+    await owner.leave();
+    await new Promise(r => setTimeout(r, 200));
+    // без токена — отказ (ник заклеймён)
+    await expect(testServer.connectTo(room, { name: 'acc1', role: 'citizen' })).rejects.toThrow();
+    // с верным токеном — успех
+    const back = await testServer.connectTo(room, { name: 'acc1', role: 'citizen', token: tok });
+    expect(room.state.players.get(back.sessionId).name).toBe('acc1');
   });
 });

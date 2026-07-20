@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { randomUUID } from 'node:crypto';
 import { START_CASH } from '@mmo/shared';
 
 export interface PlayerRecord {
@@ -10,6 +11,7 @@ export interface PlayerRecord {
   deaths: number;
   weapon: string;
   ammo: number;
+  secret?: string; // токен владельца аккаунта (не попадает в реплицируемое состояние)
 }
 
 export class GameDB {
@@ -53,14 +55,30 @@ export class GameDB {
     const has = (n: string) => cols.some(c => c.name === n);
     if (!has('weapon')) this.db.exec(`ALTER TABLE players ADD COLUMN weapon TEXT NOT NULL DEFAULT ''`);
     if (!has('ammo')) this.db.exec(`ALTER TABLE players ADD COLUMN ammo INTEGER NOT NULL DEFAULT 0`);
+    if (!has('secret')) this.db.exec(`ALTER TABLE players ADD COLUMN secret TEXT NOT NULL DEFAULT ''`);
   }
 
   load(name: string): PlayerRecord {
     const row = this.db.prepare('SELECT * FROM players WHERE name = ?').get(name) as PlayerRecord | undefined;
-    if (row) return row;
-    const rec: PlayerRecord = { name, cash: START_CASH, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 };
-    this.save(rec);
+    if (row) {
+      if (!row.secret) { // аккаунт из старой БД (до auth) — клеймим секретом при первом входе
+        row.secret = randomUUID();
+        this.db.prepare('UPDATE players SET secret = ? WHERE name = ?').run(row.secret, name);
+      }
+      return row;
+    }
+    const rec: PlayerRecord = { name, cash: START_CASH, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0, secret: randomUUID() };
+    this.db.prepare(`
+      INSERT INTO players (name, cash, safe, apt, kills, deaths, weapon, ammo, secret)
+      VALUES (@name, @cash, @safe, @apt, @kills, @deaths, @weapon, @ammo, @secret)
+    `).run(rec);
     return rec;
+  }
+
+  // { exists, secret } для аутентификации; secret '' = аккаунт ещё не заклеймён (можно занять)
+  getAuth(name: string): { exists: boolean; secret: string } {
+    const row = this.db.prepare('SELECT secret FROM players WHERE name = ?').get(name) as { secret: string } | undefined;
+    return { exists: !!row, secret: row?.secret ?? '' };
   }
 
   save(rec: PlayerRecord): void {

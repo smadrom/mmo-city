@@ -170,8 +170,17 @@ export class CityRoom extends Room<GameState> {
     });
   }
 
+  // аутентификация: ник + секрет-токен. Существующий заклеймённый ник требует верный token.
+  onAuth(_client: Client, options: { name?: string; token?: string }): { name: string } {
+    const name = String(options?.name ?? '').slice(0, 16);
+    if (!name) throw new Error('need_name');
+    const auth = this.db.getAuth(name);
+    if (auth.exists && auth.secret && options?.token !== auth.secret) throw new Error('bad_token');
+    return { name };
+  }
+
   onJoin(client: Client, options: { name?: string; role?: string }): void {
-    const name = String(options?.name ?? '').slice(0, 16) || `p${client.sessionId.slice(0, 6)}`;
+    const name = (client.auth as { name: string }).name;
     let role: 'citizen' | 'cop' = options?.role === 'cop' ? 'cop' : 'citizen';
     if (role === 'cop') {
       let cops = 0;
@@ -207,6 +216,7 @@ export class CityRoom extends Room<GameState> {
     rt.kills = rec.kills;
     rt.deaths = rec.deaths;
     this.runtimes.set(client.sessionId, rt);
+    client.send('authToken', { token: rec.secret ?? '' });
     client.send('smsInbox', { unread: this.db.unreadCount(name) });
   }
 

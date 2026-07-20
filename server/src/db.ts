@@ -56,6 +56,7 @@ export class GameDB {
     if (!has('weapon')) this.db.exec(`ALTER TABLE players ADD COLUMN weapon TEXT NOT NULL DEFAULT ''`);
     if (!has('ammo')) this.db.exec(`ALTER TABLE players ADD COLUMN ammo INTEGER NOT NULL DEFAULT 0`);
     if (!has('secret')) this.db.exec(`ALTER TABLE players ADD COLUMN secret TEXT NOT NULL DEFAULT ''`);
+    if (!has('rent_due')) this.db.exec(`ALTER TABLE players ADD COLUMN rent_due INTEGER NOT NULL DEFAULT 0`);
   }
 
   load(name: string): PlayerRecord {
@@ -79,6 +80,16 @@ export class GameDB {
   getAuth(name: string): { exists: boolean; secret: string } {
     const row = this.db.prepare('SELECT secret FROM players WHERE name = ?').get(name) as { secret: string } | undefined;
     return { exists: !!row, secret: row?.secret ?? '' };
+  }
+
+  // срок следующей ренты (ms). 0 = не задан (новый/без квартиры). Персистится → релог не сбрасывает.
+  getRentDue(name: string): number {
+    const row = this.db.prepare('SELECT rent_due AS rentDue FROM players WHERE name = ?').get(name) as { rentDue: number } | undefined;
+    return row?.rentDue ?? 0;
+  }
+
+  setRentDue(name: string, ts: number): void {
+    this.db.prepare('UPDATE players SET rent_due = ? WHERE name = ?').run(Math.floor(ts), name);
   }
 
   save(rec: PlayerRecord): void {

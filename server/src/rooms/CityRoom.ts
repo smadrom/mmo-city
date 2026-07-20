@@ -2,7 +2,7 @@ import { Room, type Client } from 'colyseus';
 import { StateView } from '@colyseus/schema';
 import {
   TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
-  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY,
+  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY, RENT_INTERVAL_MS,
   createCityMap, dist2, type AABB, type CityMap,
 } from '@mmo/shared';
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
@@ -215,6 +215,7 @@ export class CityRoom extends Room<GameState> {
     const rt = makeRuntime(Date.now());
     rt.kills = rec.kills;
     rt.deaths = rec.deaths;
+    rt.nextRentAt = this.db.getRentDue(name) || (Date.now() + RENT_INTERVAL_MS); // рента переживает релог
     this.runtimes.set(client.sessionId, rt);
     client.send('authToken', { token: rec.secret ?? '' });
     client.send('smsInbox', { unread: this.db.unreadCount(name) });
@@ -257,6 +258,7 @@ export class CityRoom extends Room<GameState> {
     if (p.role === 'zombie') return; // зомби не персистентны
     try {
       this.db.save({ name: p.name, cash: p.cash, safe: p.safe, apt: p.apt, kills: rt.kills, deaths: rt.deaths, weapon: p.weapon, ammo: p.ammo });
+      this.db.setRentDue(p.name, rt.nextRentAt); // персистим срок ренты → релог не обнуляет
     } catch (err) {
       console.error('[city] db save error', err);
     }

@@ -303,4 +303,19 @@ describe('CityRoom (integration)', () => {
     const back = await testServer.connectTo(room, { name: 'acc1', role: 'citizen', token: tok });
     expect(room.state.players.get(back.sessionId).name).toBe('acc1');
   });
+
+  it('рента переживает релог: nextRentAt восстанавливается из БД', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    await testServer.connectTo(room, { name: 'anchorRent', role: 'citizen' });
+    const c1 = await testServer.connectTo(room, { name: 'tenant', role: 'citizen' });
+    let tok = '';
+    c1.onMessage('authToken', (m: any) => { tok = m.token; });
+    await new Promise(r => setTimeout(r, 150));
+    (room as any).runtimes.get(c1.sessionId).nextRentAt = 1000; // срок ренты «в прошлом»
+    (room as any).savePlayer(c1.sessionId);
+    await c1.leave();
+    await new Promise(r => setTimeout(r, 200));
+    const c2 = await testServer.connectTo(room, { name: 'tenant', role: 'citizen', token: tok });
+    expect((room as any).runtimes.get(c2.sessionId).nextRentAt).toBe(1000); // не сброшен релогом
+  });
 });

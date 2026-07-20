@@ -133,4 +133,12 @@ describe('GameDB', () => {
     expect(auth.secret).toBe(rec.secret);
     expect(db.getAuth('nobody')).toEqual({ exists: false, secret: '' });
   });
+
+  it('rent_due: setRentDue/getRentDue персистятся, дефолт 0', () => {
+    db = new GameDB(':memory:');
+    db.load('renter');
+    expect(db.getRentDue('renter')).toBe(0);
+    db.setRentDue('renter', 1_700_000_000_000);
+    expect(db.getRentDue('renter')).toBe(1_700_000_000_000);
+  });
 });

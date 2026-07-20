@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Room } from 'colyseus.js';
 import { dist2 } from '@mmo/shared';
+import type { Avatars } from './avatars.js';
 
 const TRACER_MS = 80;
 const VIGNETTE_MS = 150;
@@ -14,14 +15,17 @@ export class Effects {
   private vignetteTimer = 0;
   private audio: AudioContext | null = null;
 
-  constructor(private scene: THREE.Scene, private room: Room) {
+  constructor(private scene: THREE.Scene, private room: Room, private avatars: Avatars) {
     room.onMessage('shot', (msg: any) => this.onShot(room.sessionId, msg));
   }
 
   private onShot(myId: string, msg: { from: { x: number; z: number }; to: { x: number; z: number }; victim: string }): void {
+    // сервер шлёт raw-позицию жертвы — она опережает интерполированный меш на ~120 мс;
+    // рисуем конец tracer'а в меш, если он есть (спека: попадание должно попадать в видимую модель)
+    const to = (msg.victim && this.avatars.meshPos(msg.victim)) || msg.to;
     const geo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(msg.from.x, 1.2, msg.from.z),
-      new THREE.Vector3(msg.to.x, 1.2, msg.to.z),
+      new THREE.Vector3(to.x, 1.2, to.z),
     ]);
     const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffee88, transparent: true }));
     this.scene.add(line);

@@ -39,6 +39,10 @@ async function start(role: string): Promise<void> {
   while (!room.state.serverTime) {
     await new Promise<void>((resolve) => room.onStateChange.once(() => resolve()));
   }
+  // consented leave клиент не шлёт — любой onLeave это потеря соединения.
+  // Прозрачного реконнекта пока нет (бэклог) — перезагрузка на экран входа;
+  // при повторном входе история чата запросится заново
+  room.onLeave(() => location.reload());
   bootGame(room);
 }
 
@@ -53,7 +57,7 @@ function bootGame(room: Room): void {
   const avatars = new Avatars(scene, room);
   const input = new InputController(room, renderer.domElement);
   const ui = new UI(room, map, avatars);
-  const effects = new Effects(scene, room);
+  const effects = new Effects(scene, room, avatars);
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;

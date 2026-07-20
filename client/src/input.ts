@@ -14,6 +14,7 @@ export class InputController {
   constructor(private room: Room, dom: HTMLElement) {
     window.addEventListener('keydown', (e) => {
       if (this.isTyping()) return;
+      if (e.repeat) return; // автоповтор зажатой клавиши (зажатый E не шлёт interact подряд)
       this.keys.add(e.code);
       if (e.code === 'KeyE') room.send('interact');
     });

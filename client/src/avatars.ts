@@ -138,7 +138,9 @@ function makeCarMesh(): THREE.Group {
 }
 
 export class Avatars {
-  readonly serverOffset: number;
+  // смещение serverTime − Date.now(); рекалибруется EMA на каждом патче,
+  // чтобы не уплывать при дрейфе часов в долгой сессии
+  private serverOffset: number;
   // предсказанная позиция себя (пешком); null — едем по серверному state
   selfPos: { x: number; z: number } | null = null;
   private players = new Map<string, PlayerMesh>();
@@ -148,6 +150,12 @@ export class Avatars {
 
   constructor(private scene: THREE.Scene, private room: Room) {
     this.serverOffset = (room.state as any).serverTime - Date.now();
+    room.onStateChange(() => {
+      const st = (room.state as any).serverTime as number;
+      if (!st) return; // serverTime ещё не проставлен
+      const sample = st - Date.now();
+      this.serverOffset += (sample - this.serverOffset) * 0.05;
+    });
 
     // colyseus.js 0.16: колбеки состояния регистрируются через getStateCallbacks
     const $ = getStateCallbacks(room);
@@ -190,9 +198,18 @@ export class Avatars {
     return Date.now() + this.serverOffset;
   }
 
+  // текущая отрисованная (интерполированная) позиция меша игрока — для tracer'ов
+  meshPos(id: string): { x: number; z: number } | null {
+    const mesh = this.players.get(id);
+    if (!mesh) return null;
+    return { x: mesh.group.position.x, z: mesh.group.position.z };
+  }
+
   update(_dt: number): void {
     const nowServer = this.serverNow();
     const rt = nowServer - INTERP_DELAY_MS;
+    // красные маркеры розыска над головами показываем только копам
+    const iAmCop = (this.room.state.players as any).get(this.room.sessionId)?.role === 'cop';
 
     this.players.forEach((mesh, id) => {
       const p = (this.room.state.players as any).get(id);
@@ -211,7 +228,7 @@ export class Avatars {
         }
       }
       (mesh.body.material as THREE.MeshLambertMaterial).color.set(p.role === 'cop' ? 0x2244ff : 0x888888);
-      mesh.marker.visible = p.wantedUntil > nowServer;
+      mesh.marker.visible = iAmCop && p.wantedUntil > nowServer;
       mesh.group.visible = p.mode !== 'dead';
       // в машине прячем только тело — табличка остаётся над машиной
       const onFoot = p.mode !== 'car';

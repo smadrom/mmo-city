@@ -1,6 +1,6 @@
 import {
   DOOR_DIST, CAR_ENTER_DIST, DELIVERY_PICKUP_DIST, RENT_PRICE,
-  WEAPONS, AMMO_PACK_PRICE, AMMO_PACK_SIZE,
+  WEAPONS, AMMO_PACK_PRICE, AMMO_PACK_SIZE, CHAT_MAX_LEN,
   dist2, type CityMap, type WeaponKind,
 } from '@mmo/shared';
 import type { Room } from 'colyseus.js';
@@ -16,8 +16,11 @@ export class UI {
   private toastTimer = 0;
   private chat = document.getElementById('chat')!;
   private chatInput = document.getElementById('chatInput') as HTMLInputElement;
+  private seenChat = new Set<string>();
+  private seenChatQueue: string[] = [];
 
   constructor(private room: Room, private map: CityMap, private avatars: Avatars) {
+    this.chatInput.maxLength = CHAT_MAX_LEN; // лимит из общего конфига, не из HTML
     room.onMessage('openSafe', () => this.safeDialog.classList.remove('hidden'));
     document.getElementById('safeClose')!.addEventListener('click', () => this.safeDialog.classList.add('hidden'));
     document.getElementById('dep100')!.addEventListener('click', () => room.send('deposit', { amount: 100 }));
@@ -68,6 +71,7 @@ export class UI {
 
     // Enter вне поля — открыть ввод (pointer lock снимаем, иначе фокус не уйти)
     window.addEventListener('keydown', (e) => {
+      if (e.repeat) return; // зажатый Enter не переоткрывает чат автоповтором
       if (e.code === 'Enter' && document.activeElement !== this.chatInput) {
         e.preventDefault();
         document.exitPointerLock();
@@ -87,7 +91,14 @@ export class UI {
     });
   }
 
-  private appendChat(msg: { from: string; text: string }): void {
+  private appendChat(msg: { from: string; text: string; t?: number }): void {
+    // гонка история/лайв (~1 RTT): одно и то же сообщение может прийти дважды —
+    // в live-broadcast и в ответе на chatHistoryReq; дедуп по from+text+t
+    const key = `${msg.from}${msg.t ?? ''}${msg.text}`;
+    if (this.seenChat.has(key)) return;
+    this.seenChat.add(key);
+    this.seenChatQueue.push(key);
+    if (this.seenChatQueue.length > 500) this.seenChat.delete(this.seenChatQueue.shift()!);
     const atBottom = this.chat.scrollTop + this.chat.clientHeight >= this.chat.scrollHeight - 10;
     const div = document.createElement('div');
     div.textContent = `${msg.from}: ${msg.text}`; // textContent — без XSS
@@ -139,7 +150,24 @@ export class UI {
     this.banner.textContent = bannerText;
     this.banner.classList.toggle('hidden', bannerText === '');
 
+    // авто-закрытие диалогов: отошёл от двери/магазина, сел в машину или умер
+    if (!this.safeDialog.classList.contains('hidden') && !this.nearOwnDoor(me)) {
+      this.safeDialog.classList.add('hidden');
+    }
+    if (!this.shopDialog.classList.contains('hidden') &&
+        !(me.mode === 'foot' && dist2(me.x, me.z, this.map.gunShop.x, this.map.gunShop.z) < DOOR_DIST * DOOR_DIST)) {
+      this.shopDialog.classList.add('hidden');
+    }
+
     this.prompt.textContent = this.computePrompt(me);
+  }
+
+  private nearOwnDoor(me: any): boolean {
+    if (me.mode !== 'foot') return false;
+    for (const [, apt] of (this.room.state.apartments as any)) {
+      if (apt.rentedBy === me.name && dist2(me.x, me.z, apt.doorX, apt.doorZ) < DOOR_DIST * DOOR_DIST) return true;
+    }
+    return false;
   }
 
   private computePrompt(me: any): string {

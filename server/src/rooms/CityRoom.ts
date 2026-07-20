@@ -216,6 +216,8 @@ export class CityRoom extends Room<GameState> {
     rt.kills = rec.kills;
     rt.deaths = rec.deaths;
     rt.nextRentAt = this.db.getRentDue(name) || (Date.now() + RENT_INTERVAL_MS); // рента переживает релог
+    rt.salaryAnchorX = p.x; // якорь патруля = точка спавна
+    rt.salaryAnchorZ = p.z;
     this.runtimes.set(client.sessionId, rt);
     client.send('authToken', { token: rec.secret ?? '' });
     client.send('smsInbox', { unread: this.db.unreadCount(name) });

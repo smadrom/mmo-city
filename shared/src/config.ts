@@ -44,6 +44,7 @@ export const JAIL_TIME_MS = 2 * 60_000;
 export const COP_SALARY = 50;
 export const COP_SALARY_INTERVAL_MS = 5 * 60_000;
 export const COP_LIMIT = 20;
+export const COP_PATROL_MIN_DIST = 30; // м смещения между выплатами — иначе AFK-коп не платится
 
 export const START_CASH = 500;
 export const DELIVERY_REWARD = 100;

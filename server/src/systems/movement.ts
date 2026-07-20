@@ -15,7 +15,7 @@ export function tickMovement(
 ): void {
   state.players.forEach((p, id) => {
     const rt = runtimes.get(id);
-    if (!rt) return;
+    if (!rt || rt.frozen) return; // замороженный призрак реконнекта не симулируется (ни движение, ни реген)
 
     if (p.mode === 'foot') {
       // математика шага общая с клиентским предсказанием (stepFoot из shared)

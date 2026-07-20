@@ -35,6 +35,8 @@ async function start(role: string): Promise<void> {
     const msg = String(e?.message ?? '');
     joinError.textContent = msg.includes('bad_token')
       ? 'Этот ник уже занят другим игроком'
+      : msg.includes('bad_version')
+      ? 'Обновите страницу (новая версия сервера)'
       : 'Не удалось подключиться (сервер полон или недоступен)';
     return;
   }

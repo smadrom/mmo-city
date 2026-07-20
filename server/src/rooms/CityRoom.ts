@@ -2,7 +2,7 @@ import { Room, type Client } from 'colyseus';
 import { StateView } from '@colyseus/schema';
 import {
   TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
-  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY, RENT_INTERVAL_MS,
+  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY, RENT_INTERVAL_MS, WRITE_COOLDOWN_MS, PROTOCOL_VERSION,
   createCityMap, dist2, type AABB, type CityMap,
 } from '@mmo/shared';
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
@@ -90,10 +90,12 @@ export class CityRoom extends Room<GameState> {
     });
     this.onMessage('interact', (client) => this.handleInteract(client));
     this.onMessage('deposit', (client, data) => {
-      adjustSafe(this.state, client.sessionId, Math.abs(Number(data?.amount) || 0));
+      if (this.writeRateLimited(client.sessionId)) return;
+      adjustSafe(this.state, client.sessionId, Math.floor(Math.abs(Number(data?.amount) || 0)));
     });
     this.onMessage('withdraw', (client, data) => {
-      adjustSafe(this.state, client.sessionId, -Math.abs(Number(data?.amount) || 0));
+      if (this.writeRateLimited(client.sessionId)) return;
+      adjustSafe(this.state, client.sessionId, -Math.floor(Math.abs(Number(data?.amount) || 0)));
     });
     this.onMessage('chat', (client, data) => {
       const msg = tryChat(this.state, this.runtimes, client.sessionId, data?.text, Date.now());
@@ -138,12 +140,15 @@ export class CityRoom extends Room<GameState> {
       client.send('smsThread', { with: withNick, items: this.db.getThread(p.name, withNick, SMS_THREAD_LIMIT) });
     });
     this.onMessage('smsRead', (client, data) => {
+      if (this.writeRateLimited(client.sessionId)) return;
       const p = this.state.players.get(client.sessionId);
       const withNick = String(data?.with ?? '').trim();
       if (!p || !withNick) return;
       this.db.markRead(p.name, withNick);
     });
     this.onMessage('transfer', (client, data) => {
+      if (this.writeRateLimited(client.sessionId)) return;
+      this.savePlayer(client.sessionId); // синк БД с авторитетной памятью: иначе db.transfer (WHERE cash>=amount) даёт ложный no_money после свежего заработка
       const res = tryTransfer(this.state, this.db, client.sessionId, data?.to, data?.amount, Date.now());
       client.send('transferResult', { ok: res.ok, error: res.error, balance: res.balance });
       if (res.ok && res.toNick && res.amount) {
@@ -171,16 +176,24 @@ export class CityRoom extends Room<GameState> {
   }
 
   // аутентификация: ник + секрет-токен. Существующий заклеймённый ник требует верный token.
-  onAuth(_client: Client, options: { name?: string; token?: string }): { name: string } {
+  onAuth(_client: Client, options: { name?: string; token?: string; ver?: number }): { name: string } {
+    // хендшейк версии: присланный, но несовпадающий ver отклоняем (устаревший клиент после бампа схемы)
+    if (options?.ver !== undefined && options.ver !== PROTOCOL_VERSION) throw new Error('bad_version');
     const name = String(options?.name ?? '').slice(0, 16);
     if (!name) throw new Error('need_name');
     const auth = this.db.getAuth(name);
     if (auth.exists && auth.secret && options?.token !== auth.secret) throw new Error('bad_token');
+    // один активный сеанс на ник: онлайн-дубль отклоняем. Замороженный призрак — исключение:
+    // это реконнект владельца (токен уже проверен выше), его вытеснит onJoin.
+    const existingId = this.findSessionByName(name);
+    if (existingId && !this.runtimes.get(existingId)?.frozen) throw new Error('name_online');
     return { name };
   }
 
   onJoin(client: Client, options: { name?: string; role?: string }): void {
     const name = (client.auth as { name: string }).name;
+    const ghostId = this.findSessionByName(name); // вытесняем «призрака» реконнекта того же ника
+    if (ghostId) this.removePlayer(ghostId);
     let role: 'citizen' | 'cop' = options?.role === 'cop' ? 'cop' : 'citizen';
     if (role === 'cop') {
       let cops = 0;
@@ -226,7 +239,11 @@ export class CityRoom extends Room<GameState> {
   async onLeave(client: Client, consented: boolean): Promise<void> {
     try {
       if (consented) throw new Error('consented leave');
+      const rt = this.runtimes.get(client.sessionId);
+      if (rt) rt.frozen = true; // заморозить призрака на окно реконнекта (не двигается/не арестуется/не агрит зомби)
       await this.allowReconnection(client, 10);
+      const rt2 = this.runtimes.get(client.sessionId);
+      if (rt2) rt2.frozen = false; // настоящий colyseus-реконнект (если появится) — размораживаем
     } catch {
       this.removePlayer(client.sessionId);
     }
@@ -266,6 +283,16 @@ export class CityRoom extends Room<GameState> {
     }
   }
 
+  // антиспам дешёвых пишущих эндпоинтов (deposit/withdraw/transfer/smsRead)
+  private writeRateLimited(id: string): boolean {
+    const rt = this.runtimes.get(id);
+    if (!rt) return true;
+    const now = Date.now();
+    if (now - rt.lastWriteAt < WRITE_COOLDOWN_MS) return true;
+    rt.lastWriteAt = now;
+    return false;
+  }
+
   private findSessionByName(name: string): string | null {
     let found: string | null = null;
     this.state.players.forEach((pl, id) => {
@@ -288,7 +315,7 @@ export class CityRoom extends Room<GameState> {
         tryStartDelivery(this.state, client.sessionId, this.map, Date.now());
         return;
       }
-      tryExitCar(this.state, client.sessionId);
+      tryExitCar(this.state, client.sessionId, this.colliders);
       return;
     }
     if (p.mode !== 'foot') return;

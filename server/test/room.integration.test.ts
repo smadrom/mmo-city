@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Server } from 'colyseus';
-import { createCityMap, CAR_ENTER_DIST, ZOMBIE_COUNT, PUNCH_DAMAGE } from '@mmo/shared';
+import { createCityMap, CAR_ENTER_DIST, ZOMBIE_COUNT, PUNCH_DAMAGE, PROTOCOL_VERSION } from '@mmo/shared';
 import { CityRoom } from '../src/rooms/CityRoom.js';
 import type { GameState } from '../src/schema/GameState.js';
 
@@ -317,5 +317,39 @@ describe('CityRoom (integration)', () => {
     await new Promise(r => setTimeout(r, 200));
     const c2 = await testServer.connectTo(room, { name: 'tenant', role: 'citizen', token: tok });
     expect((room as any).runtimes.get(c2.sessionId).nextRentAt).toBe(1000); // не сброшен релогом
+  });
+
+  it('версия протокола: несовпадающий ver отклоняется, текущий — проходит', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    await testServer.connectTo(room, { name: 'verAnchor', role: 'citizen' }); // держит комнату (иначе autoDispose)
+    await expect(testServer.connectTo(room, { name: 'verbad', role: 'citizen', ver: 999 })).rejects.toThrow();
+    const ok = await testServer.connectTo(room, { name: 'vergood', role: 'citizen', ver: PROTOCOL_VERSION });
+    expect(room.state.players.get(ok.sessionId).name).toBe('vergood');
+  });
+
+  it('дубль активного ника отклоняется (один сеанс на аккаунт)', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'dup', role: 'citizen' });
+    let tok = '';
+    c1.onMessage('authToken', (m: any) => { tok = m.token; });
+    await new Promise(r => setTimeout(r, 150));
+    // c1 всё ещё онлайн → второй вход тем же ником (даже с токеном) отклоняется
+    await expect(testServer.connectTo(room, { name: 'dup', role: 'citizen', token: tok })).rejects.toThrow();
+  });
+
+  it('призрак замораживается при обрыве: не двигается в окне реконнекта', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    await testServer.connectTo(room, { name: 'ghostAnchor', role: 'citizen' }); // держит комнату
+    const c = await testServer.connectTo(room, { name: 'ghost1', role: 'citizen' });
+    const id = c.sessionId;
+    const p = room.state.players.get(id);
+    p.x = 190; p.z = 190; // подальше от зомби/копов
+    (room as any).runtimes.get(id).input = { up: true, down: false, left: false, right: false, sprint: false, rotY: 0 };
+    await c.leave(false); // обрыв соединения (не consented) → onLeave(consented=false)
+    await new Promise(r => setTimeout(r, 300));
+    expect((room as any).runtimes.get(id)?.frozen).toBe(true);
+    const zBefore = room.state.players.get(id)?.z;
+    await new Promise(r => setTimeout(r, 400));
+    expect(room.state.players.get(id)?.z).toBe(zBefore); // заморожен: input=up, но не движется
   });
 });

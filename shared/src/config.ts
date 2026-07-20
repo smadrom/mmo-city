@@ -1,4 +1,5 @@
 // Игровые константы. Единый источник правды для сервера и клиента.
+export const PROTOCOL_VERSION = 1; // хендшейк схемы/сообщений; инкрементить при изменении Player/протокола
 export const TICK_RATE = 20;
 export const MAP_HALF = 200; // мир 400x400, координаты от -200 до 200
 
@@ -88,6 +89,7 @@ export const SMS_HISTORY_COOLDOWN_MS = 5000; // как у chatHistoryReq
 export const TRANSFER_MIN = 1;
 export const TRANSFER_MAX = 100_000;
 export const TRANSFER_HISTORY = 10;
+export const WRITE_COOLDOWN_MS = 500; // антиспам дешёвых пишущих эндпоинтов: банк/переводы/smsRead
 
 export const MINIMAP_SIZE = 200;  // px, диаметр круга
 export const MINIMAP_RADIUS = 60; // метров обзора от центра

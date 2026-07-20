@@ -31,7 +31,7 @@ export function tickPolice(
   // Аресты
   state.players.forEach((crim, crimId) => {
     const crt = runtimes.get(crimId);
-    if (!crt) return;
+    if (!crt || crt.frozen) return; // замороженного призрака не арестовываем (не может защититься)
     const wanted = crim.wantedUntil > now && crim.mode !== 'jail' && crim.mode !== 'dead';
     if (!wanted) {
       crt.arrestProgress = 0;

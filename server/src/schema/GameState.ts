@@ -1,4 +1,4 @@
-import { Schema, MapSchema, type } from '@colyseus/schema';
+import { Schema, MapSchema, type, view } from '@colyseus/schema';
 import { MAX_HP } from '@mmo/shared';
 
 export class Player extends Schema {
@@ -12,15 +12,15 @@ export class Player extends Schema {
   @type('string') mode: 'foot' | 'car' | 'jail' | 'dead' = 'foot';
   @type('string') carId = '';
   @type('string') apt = '';
-  @type('number') wantedUntil = 0;
-  @type('number') jailUntil = 0;
-  @type('number') cash = 0;
-  @type('number') safe = 0;
-  @type('boolean') cargo = false;
-  @type('string') deliveryTarget = '';
-  @type('number') deliveryDeadline = 0;
-  @type('string') weapon = ''; // '' = кулаки
-  @type('number') ammo = 0;
+  @type('number') wantedUntil = 0; // публично: коп видит красный маркер над розыскным
+  @view() @type('number') jailUntil = 0;
+  @view() @type('number') cash = 0;
+  @view() @type('number') safe = 0;
+  @view() @type('boolean') cargo = false;
+  @view() @type('string') deliveryTarget = '';
+  @view() @type('number') deliveryDeadline = 0;
+  @type('string') weapon = ''; // публично: другие рисуют оружие в руке; '' = кулаки
+  @view() @type('number') ammo = 0;
 }
 
 export class Car extends Schema {

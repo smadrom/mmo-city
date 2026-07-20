@@ -64,12 +64,23 @@ describe('полиция', () => {
     expect(crim.x).toBe(map.policeDoor.x);
   });
 
-  it('зарплата копа каждые COP_SALARY_INTERVAL_MS', () => {
+  it('зарплата копа за патруль каждые COP_SALARY_INTERVAL_MS', () => {
     const { state, cop, crim, runtimes } = setup();
     crim.wantedUntil = 0; // убрать арест из картины
     cop.cash = 0;
+    cop.x = 50; // патрулировал: сместился ≥ COP_PATROL_MIN_DIST от якоря (0,0)
     tickPolice(state, runtimes, COP_SALARY_INTERVAL_MS + 1, 0.05, map);
     expect(cop.cash).toBe(COP_SALARY);
+    expect(runtimes.get('c')!.nextSalaryAt).toBe(COP_SALARY_INTERVAL_MS + 1 + COP_SALARY_INTERVAL_MS);
+  });
+
+  it('AFK-коп (не двигался) зарплату не получает, но окно и якорь сдвигаются', () => {
+    const { state, cop, crim, runtimes } = setup();
+    crim.wantedUntil = 0;
+    cop.cash = 0;
+    // cop остаётся в (0,0) == якорь → не патрулировал
+    tickPolice(state, runtimes, COP_SALARY_INTERVAL_MS + 1, 0.05, map);
+    expect(cop.cash).toBe(0);
     expect(runtimes.get('c')!.nextSalaryAt).toBe(COP_SALARY_INTERVAL_MS + 1 + COP_SALARY_INTERVAL_MS);
   });
 

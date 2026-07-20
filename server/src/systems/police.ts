@@ -1,6 +1,6 @@
 import {
   ARREST_RANGE, ARREST_TIME_MS, ARREST_CASH_LOSS, ARREST_BONUS, JAIL_TIME_MS,
-  COP_SALARY, COP_SALARY_INTERVAL_MS, MAX_HP,
+  COP_SALARY, COP_SALARY_INTERVAL_MS, COP_PATROL_MIN_DIST, MAX_HP,
   dist2, type CityMap,
 } from '@mmo/shared';
 import type { GameState } from '../schema/GameState.js';
@@ -18,8 +18,13 @@ export function tickPolice(
     const rt = runtimes.get(id);
     if (!rt) return;
     if (p.role === 'cop' && p.mode !== 'dead' && now >= rt.nextSalaryAt) {
-      p.cash += COP_SALARY;
+      // платим только за патруль: коп должен сместиться от прошлого якоря, иначе AFK-фарм
+      const moved = dist2(p.x, p.z, rt.salaryAnchorX, rt.salaryAnchorZ) >= COP_PATROL_MIN_DIST * COP_PATROL_MIN_DIST;
+      if (moved) p.cash += COP_SALARY;
+      // окно и якорь двигаем в любом случае — AFK-коп не копит «долг» на разовую выплату
       rt.nextSalaryAt = now + COP_SALARY_INTERVAL_MS;
+      rt.salaryAnchorX = p.x;
+      rt.salaryAnchorZ = p.z;
     }
   });
 

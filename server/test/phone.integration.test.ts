@@ -51,12 +51,15 @@ describe('Телефон (integration)', () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     const anchor = await testServer.connectTo(room, { name: 'anchor1', role: 'citizen' });
     const off = await testServer.connectTo(room, { name: 'off1', role: 'citizen' });
+    let offTok = '';
+    off.onMessage('authToken', (m: any) => { offTok = m.token; });
+    await wait(150);
     await off.leave();
     await wait(200);
     anchor.onMessage('sms', () => {});
     anchor.send('sms', { to: 'off1', text: 'где ты?' });
     await wait(200);
-    const back = await testServer.connectTo(room, { name: 'off1', role: 'citizen' });
+    const back = await testServer.connectTo(room, { name: 'off1', role: 'citizen', token: offTok });
     let inbox: any = null;
     back.onMessage('smsInbox', (m) => { inbox = m; });
     await wait(300);

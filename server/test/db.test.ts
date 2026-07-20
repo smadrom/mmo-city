@@ -17,14 +17,15 @@ describe('GameDB', () => {
   it('новый игрок получает стартовые значения', () => {
     db = new GameDB(':memory:');
     const rec = db.load('alice');
-    expect(rec).toEqual({ name: 'alice', cash: START_CASH, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 });
+    expect(rec).toMatchObject({ name: 'alice', cash: START_CASH, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 });
+    expect(rec.secret).toBeTruthy(); // новый аккаунт получает секрет
   });
 
   it('save/load сохраняет прогресс, включая оружие', () => {
     db = new GameDB(':memory:');
     db.load('bob');
     db.save({ name: 'bob', cash: 777, safe: 200, apt: 'apt3', kills: 2, deaths: 1, weapon: 'pistol', ammo: 90 });
-    expect(db.load('bob')).toEqual({ name: 'bob', cash: 777, safe: 200, apt: 'apt3', kills: 2, deaths: 1, weapon: 'pistol', ammo: 90 });
+    expect(db.load('bob')).toMatchObject({ name: 'bob', cash: 777, safe: 200, apt: 'apt3', kills: 2, deaths: 1, weapon: 'pistol', ammo: 90 });
   });
 
   it('данные переживают переоткрытие файла', () => {
@@ -50,7 +51,7 @@ describe('GameDB', () => {
     raw.close();
 
     db = new GameDB(path); // первая миграция
-    expect(db.load('old')).toEqual({ name: 'old', cash: 100, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 });
+    expect(db.load('old')).toMatchObject({ name: 'old', cash: 100, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 });
     db.close();
     db = new GameDB(path); // повторный запуск — миграция не падает
     expect(db.load('old').cash).toBe(100);
@@ -121,5 +122,23 @@ describe('GameDB', () => {
     db.load('alice');
     expect(db.hasPlayer('alice')).toBe(true);
     expect(db.hasPlayer('ghost')).toBe(false);
+  });
+
+  it('auth: новый аккаунт получает секрет; getAuth совпадает; чужой ник свободен', () => {
+    db = new GameDB(':memory:');
+    const rec = db.load('neo');
+    expect(rec.secret).toBeTruthy();
+    const auth = db.getAuth('neo');
+    expect(auth.exists).toBe(true);
+    expect(auth.secret).toBe(rec.secret);
+    expect(db.getAuth('nobody')).toEqual({ exists: false, secret: '' });
+  });
+
+  it('rent_due: setRentDue/getRentDue персистятся, дефолт 0', () => {
+    db = new GameDB(':memory:');
+    db.load('renter');
+    expect(db.getRentDue('renter')).toBe(0);
+    db.setRentDue('renter', 1_700_000_000_000);
+    expect(db.getRentDue('renter')).toBe(1_700_000_000_000);
   });
 });

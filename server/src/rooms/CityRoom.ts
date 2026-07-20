@@ -1,7 +1,8 @@
 import { Room, type Client } from 'colyseus';
+import { StateView } from '@colyseus/schema';
 import {
   TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
-  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY,
+  SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY, RENT_INTERVAL_MS,
   createCityMap, dist2, type AABB, type CityMap,
 } from '@mmo/shared';
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
@@ -169,8 +170,17 @@ export class CityRoom extends Room<GameState> {
     });
   }
 
+  // аутентификация: ник + секрет-токен. Существующий заклеймённый ник требует верный token.
+  onAuth(_client: Client, options: { name?: string; token?: string }): { name: string } {
+    const name = String(options?.name ?? '').slice(0, 16);
+    if (!name) throw new Error('need_name');
+    const auth = this.db.getAuth(name);
+    if (auth.exists && auth.secret && options?.token !== auth.secret) throw new Error('bad_token');
+    return { name };
+  }
+
   onJoin(client: Client, options: { name?: string; role?: string }): void {
-    const name = String(options?.name ?? '').slice(0, 16) || `p${client.sessionId.slice(0, 6)}`;
+    const name = (client.auth as { name: string }).name;
     let role: 'citizen' | 'cop' = options?.role === 'cop' ? 'cop' : 'citizen';
     if (role === 'cop') {
       let cops = 0;
@@ -198,10 +208,18 @@ export class CityRoom extends Room<GameState> {
     }
     this.state.players.set(client.sessionId, p);
 
+    // приватные поля (@view) видит только владелец
+    client.view = new StateView();
+    client.view.add(p);
+
     const rt = makeRuntime(Date.now());
     rt.kills = rec.kills;
     rt.deaths = rec.deaths;
+    rt.nextRentAt = this.db.getRentDue(name) || (Date.now() + RENT_INTERVAL_MS); // рента переживает релог
+    rt.salaryAnchorX = p.x; // якорь патруля = точка спавна
+    rt.salaryAnchorZ = p.z;
     this.runtimes.set(client.sessionId, rt);
+    client.send('authToken', { token: rec.secret ?? '' });
     client.send('smsInbox', { unread: this.db.unreadCount(name) });
   }
 
@@ -242,6 +260,7 @@ export class CityRoom extends Room<GameState> {
     if (p.role === 'zombie') return; // зомби не персистентны
     try {
       this.db.save({ name: p.name, cash: p.cash, safe: p.safe, apt: p.apt, kills: rt.kills, deaths: rt.deaths, weapon: p.weapon, ammo: p.ammo });
+      this.db.setRentDue(p.name, rt.nextRentAt); // персистим срок ренты → релог не обнуляет
     } catch (err) {
       console.error('[city] db save error', err);
     }

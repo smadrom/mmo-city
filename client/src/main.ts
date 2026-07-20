@@ -30,9 +30,12 @@ async function start(role: string): Promise<void> {
   let room: Room;
   try {
     room = await connect(name, role);
-  } catch {
+  } catch (e: any) {
     connecting = false;
-    joinError.textContent = 'Не удалось подключиться (сервер полон или недоступен)';
+    const msg = String(e?.message ?? '');
+    joinError.textContent = msg.includes('bad_token')
+      ? 'Этот ник уже занят другим игроком'
+      : 'Не удалось подключиться (сервер полон или недоступен)';
     return;
   }
   joinScreen.style.display = 'none';

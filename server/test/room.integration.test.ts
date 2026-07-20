@@ -89,11 +89,14 @@ describe('CityRoom (integration)', () => {
     // якорный клиент держит комнату (и её in-memory БД) живой между подключениями
     await testServer.connectTo(room, { name: 'anchor', role: 'citizen' });
     const c1 = await testServer.connectTo(room, { name: 'persist1', role: 'citizen' });
+    let tok = '';
+    c1.onMessage('authToken', (m: any) => { tok = m.token; });
+    await new Promise(r => setTimeout(r, 150));
     room.state.players.get(c1.sessionId).cash = 1234;
     await c1.leave();
     await new Promise(r => setTimeout(r, 200));
     expect(room.state.players.has(c1.sessionId)).toBe(false);
-    const c2 = await testServer.connectTo(room, { name: 'persist1', role: 'citizen' });
+    const c2 = await testServer.connectTo(room, { name: 'persist1', role: 'citizen', token: tok });
     expect(room.state.players.get(c2.sessionId).cash).toBe(1234);
   });
 
@@ -262,5 +265,57 @@ describe('CityRoom (integration)', () => {
     expect(history.items).toHaveLength(20);
     expect(history.items[0].text).toBe('msg2');
     expect(history.items[19].text).toBe('msg21');
+  });
+
+  it('приватные поля видит только владелец (@view)', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const a = await testServer.connectTo(room, { name: 'viewA', role: 'citizen' });
+    const b = await testServer.connectTo(room, { name: 'viewB', role: 'citizen' });
+    // серверная авторитетная величина
+    room.state.players.get(a.sessionId).cash = 999;
+    room.state.players.get(a.sessionId).ammo = 42;
+    await new Promise(r => setTimeout(r, 300)); // дать патчам дойти до клиента A
+    const meOnA = (a.state.players as any).get(a.sessionId);
+    const otherOnA = (a.state.players as any).get(b.sessionId);
+    // свой cash/ammo реплицирован владельцу…
+    expect(meOnA.cash).toBe(999);
+    expect(meOnA.ammo).toBe(42);
+    // …а чужие приватные поля НЕ утекают (клиент их вообще не получает → undefined)
+    expect(otherOnA.cash).toBeUndefined();
+    expect(otherOnA.ammo).toBeUndefined();
+    // публичные поля чужого игрока при этом видны
+    expect(otherOnA.name).toBe('viewB');
+  });
+
+  it('auth: чужой под тем же ником без токена отклоняется, с токеном — проходит', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    await testServer.connectTo(room, { name: 'anchorAuth', role: 'citizen' }); // держит комнату/БД
+    const owner = await testServer.connectTo(room, { name: 'acc1', role: 'citizen' });
+    let tok = '';
+    owner.onMessage('authToken', (m: any) => { tok = m.token; });
+    await new Promise(r => setTimeout(r, 150));
+    expect(tok).toBeTruthy();
+    await owner.leave();
+    await new Promise(r => setTimeout(r, 200));
+    // без токена — отказ (ник заклеймён)
+    await expect(testServer.connectTo(room, { name: 'acc1', role: 'citizen' })).rejects.toThrow();
+    // с верным токеном — успех
+    const back = await testServer.connectTo(room, { name: 'acc1', role: 'citizen', token: tok });
+    expect(room.state.players.get(back.sessionId).name).toBe('acc1');
+  });
+
+  it('рента переживает релог: nextRentAt восстанавливается из БД', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    await testServer.connectTo(room, { name: 'anchorRent', role: 'citizen' });
+    const c1 = await testServer.connectTo(room, { name: 'tenant', role: 'citizen' });
+    let tok = '';
+    c1.onMessage('authToken', (m: any) => { tok = m.token; });
+    await new Promise(r => setTimeout(r, 150));
+    (room as any).runtimes.get(c1.sessionId).nextRentAt = 1000; // срок ренты «в прошлом»
+    (room as any).savePlayer(c1.sessionId);
+    await c1.leave();
+    await new Promise(r => setTimeout(r, 200));
+    const c2 = await testServer.connectTo(room, { name: 'tenant', role: 'citizen', token: tok });
+    expect((room as any).runtimes.get(c2.sessionId).nextRentAt).toBe(1000); // не сброшен релогом
   });
 });

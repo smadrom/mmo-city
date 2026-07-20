@@ -22,6 +22,8 @@ export interface Runtime {
   arrestProgress: number; // мс, накопленные копом рядом
   respawnAt: number;
   nextSalaryAt: number;
+  salaryAnchorX: number; // позиция при прошлой выплате — зарплата только за патруль (сдвиг)
+  salaryAnchorZ: number;
   nextRentAt: number;
   kills: number;
   deaths: number;
@@ -43,6 +45,8 @@ export function makeRuntime(now: number): Runtime {
     arrestProgress: 0,
     respawnAt: 0,
     nextSalaryAt: now + COP_SALARY_INTERVAL_MS,
+    salaryAnchorX: 0,
+    salaryAnchorZ: 0,
     nextRentAt: now + RENT_INTERVAL_MS,
     kills: 0,
     deaths: 0,

@@ -122,6 +122,17 @@ describe('переводы', () => {
     expect(tryTransfer(state, db, 's1', 'payer', 10, 1000).error).toBe('self');
     expect(tryTransfer(state, db, 's1', 'ghost', 10, 1000).error).toBe('no_such_user');
   });
+
+  it('state авторитетен: перевод после траты в state (БД отстаёт) → no_money', () => {
+    const { state, p, db } = setupTransfer();
+    // БД ещё хранит START_CASH=500 (savePlayer не было), в state уже потрачено
+    p.cash = 100;
+    const res = tryTransfer(state, db, 's1', 'payee', 400, 7000);
+    expect(res).toMatchObject({ ok: false, error: 'no_money' });
+    expect(p.cash).toBe(100);
+    expect(db.load('payer').cash).toBe(START_CASH);
+    expect(db.load('payee').cash).toBe(START_CASH);
+  });
 });
 
 describe('удалённый заказ (телефон)', () => {

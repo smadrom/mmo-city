@@ -34,8 +34,9 @@ export class InputController {
     });
 
     dom.addEventListener('click', () => {
+      if (this.blocked) return; // оверлей закрывается только своей клавишей — клик по canvas под ним игнорируем
       if (document.pointerLockElement !== dom) dom.requestPointerLock();
-      else if (!this.blocked) room.send('attack');
+      else room.send('attack');
     });
     window.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement === dom) this.yaw -= e.movementX * 0.003;

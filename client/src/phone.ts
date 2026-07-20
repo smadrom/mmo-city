@@ -1,4 +1,4 @@
-import { TARGET_LABELS } from '@mmo/shared';
+import { SMS_HISTORY_COOLDOWN_MS, TARGET_LABELS } from '@mmo/shared';
 import type { Room } from 'colyseus.js';
 import { isTypingTarget, type InputController } from './input.js';
 
@@ -14,7 +14,9 @@ export class Phone {
   private root = document.getElementById('phone')!;
   private screen: Screen = 'phoneHome';
   private threadWith = '';
-  private threadIds = new Set<number>(); // дедуп live/история по id строки БД
+  private threadMsgs = new Map<number, SmsItem>(); // тред целиком: дедуп live/история по id строки БД
+  private pendingThread = ''; // тред, чей smsThreadReq ещё не отвечен (сервер режет повторы кулдауном)
+  private lastThreadReqAt = 0;
   private unread = 0;
   private me(): any { return (this.room.state.players as any).get(this.room.sessionId); }
   private meName(): string { return this.me()?.name ?? ''; }
@@ -68,10 +70,11 @@ export class Phone {
     room.onMessage('smsHistory', (m: any) => this.renderDialogs(m.dialogs));
     room.onMessage('smsThread', (m: any) => {
       if (m.with !== this.threadWith) return;
-      this.threadIds.clear();
-      const box = document.getElementById('threadMsgs')!;
-      box.textContent = '';
-      for (const item of m.items) this.appendMsg(item);
+      for (const item of m.items) this.threadMsgs.set(item.id, item); // merge: live-смс между запросом и ответом не затираются
+      this.renderThread();
+      if (m.with === this.pendingThread) this.pendingThread = '';
+      // прочитанным помечаем только когда история реально показана
+      this.room.send('smsRead', { with: this.threadWith });
     });
     room.onMessage('transferResult', (m: any) => {
       this.toast(m.ok ? 'Переведено' : this.transferErrorText(m.error));
@@ -109,6 +112,8 @@ export class Phone {
 
   update(): void {
     if (!this.isOpen) return;
+    // сервер молча роняет smsThreadReq чаще раза в кулдаун — догружаем тред после него
+    if (this.pendingThread && Date.now() - this.lastThreadReqAt >= SMS_HISTORY_COOLDOWN_MS) this.requestThread();
     const me = this.me();
     if (!me) return;
     // часы
@@ -153,10 +158,15 @@ export class Phone {
     this.threadWith = nick;
     document.getElementById('threadTitle')!.textContent = nick;
     document.getElementById('threadMsgs')!.textContent = '';
-    this.threadIds.clear();
+    this.threadMsgs.clear();
     this.show('appThread');
-    this.room.send('smsThreadReq', { with: nick });
-    this.room.send('smsRead', { with: nick });
+    this.requestThread(); // smsRead шлём только из ответа smsThread — когда история показана
+  }
+
+  private requestThread(): void {
+    this.pendingThread = this.threadWith;
+    this.lastThreadReqAt = Date.now();
+    this.room.send('smsThreadReq', { with: this.threadWith });
   }
 
   private sendSms(): void {
@@ -185,14 +195,28 @@ export class Phone {
   }
 
   private appendMsg(item: SmsItem): void {
-    if (this.threadIds.has(item.id)) return;
-    this.threadIds.add(item.id);
+    if (this.threadMsgs.has(item.id)) return;
+    this.threadMsgs.set(item.id, item);
     const box = document.getElementById('threadMsgs')!;
+    box.append(this.msgDiv(item));
+    box.scrollTop = box.scrollHeight;
+  }
+
+  // перерисовка всего треда из карты (по возрастанию id) — дедуп уже в Map
+  private renderThread(): void {
+    const box = document.getElementById('threadMsgs')!;
+    box.textContent = '';
+    for (const item of [...this.threadMsgs.values()].sort((a, b) => a.id - b.id)) {
+      box.append(this.msgDiv(item));
+    }
+    box.scrollTop = box.scrollHeight;
+  }
+
+  private msgDiv(item: SmsItem): HTMLDivElement {
     const div = document.createElement('div');
     div.className = item.fromNick === this.meName() ? 'msgOut' : 'msgIn';
     div.textContent = item.text;
-    box.append(div);
-    box.scrollTop = box.scrollHeight;
+    return div;
   }
 
   private renderDialogs(dialogs: DialogRow[]): void {

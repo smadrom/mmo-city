@@ -82,6 +82,7 @@ export function tryTransfer(
   if (!toNick) return { ok: false, error: 'no_such_user' };
   if (toNick === p.name) return { ok: false, error: 'self' };
   if (!db.hasPlayer(toNick)) return { ok: false, error: 'no_such_user' };
+  if (p.cash < sum) return { ok: false, error: 'no_money' }; // state авторитетен: БД отстаёт до 5с (savePlayer)
   if (!db.transfer(p.name, toNick, sum, now)) return { ok: false, error: 'no_money' };
   p.cash -= sum;
   state.players.forEach((pl) => { if (pl.name === toNick) pl.cash += sum; });

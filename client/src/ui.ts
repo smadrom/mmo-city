@@ -1,6 +1,6 @@
 import {
   DOOR_DIST, CAR_ENTER_DIST, DELIVERY_PICKUP_DIST, RENT_PRICE,
-  WEAPONS, AMMO_PACK_PRICE, AMMO_PACK_SIZE, CHAT_MAX_LEN,
+  WEAPONS, AMMO_PACK_PRICE, AMMO_PACK_SIZE, CHAT_MAX_LEN, TARGET_LABELS,
   dist2, type CityMap, type WeaponKind,
 } from '@mmo/shared';
 import type { Room } from 'colyseus.js';
@@ -23,7 +23,10 @@ export class UI {
 
   constructor(private room: Room, private map: CityMap, private avatars: Avatars, private input: InputController) {
     this.chatInput.maxLength = CHAT_MAX_LEN; // лимит из общего конфига, не из HTML
-    room.onMessage('openSafe', () => this.safeDialog.classList.remove('hidden'));
+    room.onMessage('openSafe', () => {
+      document.exitPointerLock(); // иначе клики не доходят до кнопок под захватом мыши
+      this.safeDialog.classList.remove('hidden');
+    });
     document.getElementById('safeClose')!.addEventListener('click', () => this.safeDialog.classList.add('hidden'));
     document.getElementById('dep100')!.addEventListener('click', () => room.send('deposit', { amount: 100 }));
     document.getElementById('depAll')!.addEventListener('click', () => {
@@ -39,7 +42,10 @@ export class UI {
     // не повторяли последнее действие (в диалоге нет текстовых полей)
     this.safeDialog.addEventListener('click', (e) => (e.target as HTMLElement).blur());
 
-    room.onMessage('openShop', () => this.shopDialog.classList.remove('hidden'));
+    room.onMessage('openShop', () => {
+      document.exitPointerLock();
+      this.shopDialog.classList.remove('hidden');
+    });
     room.onMessage('shopResult', (msg: any) => {
       const texts: Record<string, string> = {
         ok: 'Куплено', too_far: 'Подойди ближе к магазину',
@@ -145,19 +151,21 @@ export class UI {
       `${roleRu}${me.apt ? `  |  Квартира: ${me.apt}` : ''}\n` +
       weaponLine;
 
-    // Баннеры
-    let bannerText = '';
+    // Баннеры: все активные строки сразу (например, розыск + груз одновременно)
+    const lines: string[] = [];
     if (me.mode === 'jail') {
-      bannerText = `ТЮРЬМА: ${Math.max(0, Math.ceil((me.jailUntil - nowServer) / 1000))} сек`;
-    } else if (me.wantedUntil > nowServer) {
-      bannerText = `В РОЗЫСКЕ: ${Math.ceil((me.wantedUntil - nowServer) / 1000)} сек`;
-    } else if (me.cargo) {
-      bannerText = `Груз → ${me.deliveryTarget}: ${Math.max(0, Math.ceil((me.deliveryDeadline - nowServer) / 1000))} сек`;
-    } else if (me.mode === 'dead') {
-      bannerText = 'Вы погибли. Респаун...';
+      lines.push(`ТЮРЬМА: ${Math.max(0, Math.ceil((me.jailUntil - nowServer) / 1000))} сек`);
     }
-    this.banner.textContent = bannerText;
-    this.banner.classList.toggle('hidden', bannerText === '');
+    if (me.wantedUntil > nowServer) {
+      lines.push(`В РОЗЫСКЕ: ${Math.ceil((me.wantedUntil - nowServer) / 1000)} сек`);
+    }
+    if (me.cargo) {
+      const target = TARGET_LABELS[me.deliveryTarget] ?? me.deliveryTarget;
+      lines.push(`Груз → ${target}: ${Math.max(0, Math.ceil((me.deliveryDeadline - nowServer) / 1000))} сек`);
+    }
+    if (me.mode === 'dead') lines.push('Вы погибли. Респаун...');
+    this.banner.textContent = lines.join('\n');
+    this.banner.classList.toggle('hidden', lines.length === 0);
 
     // авто-закрытие диалогов: отошёл от двери/магазина, сел в машину или умер
     if (!this.safeDialog.classList.contains('hidden') && !this.nearOwnDoor(me)) {

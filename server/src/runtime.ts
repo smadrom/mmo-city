@@ -21,6 +21,8 @@ export interface Runtime {
   nextRentAt: number;
   kills: number;
   deaths: number;
+  nextWanderAt: number; // зомби: когда переслучить направление блуждания
+  wanderRotY: number;
 }
 
 export function makeRuntime(now: number): Runtime {
@@ -36,5 +38,7 @@ export function makeRuntime(now: number): Runtime {
     nextRentAt: now + RENT_INTERVAL_MS,
     kills: 0,
     deaths: 0,
+    nextWanderAt: 0,
+    wanderRotY: 0,
   };
 }

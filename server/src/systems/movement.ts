@@ -1,5 +1,6 @@
 import {
   MAX_HP, HP_REGEN_PER_SEC, HP_REGEN_DELAY_MS,
+  ZOMBIE_SPEED, PLAYER_SPEED,
   stepFoot, type AABB,
 } from '@mmo/shared';
 import type { GameState } from '../schema/GameState.js';
@@ -18,7 +19,7 @@ export function tickMovement(
 
     if (p.mode === 'foot') {
       // математика шага общая с клиентским предсказанием (stepFoot из shared)
-      const res = stepFoot(p.x, p.z, rt.input, dt, colliders);
+      const res = stepFoot(p.x, p.z, rt.input, dt, colliders, p.role === 'zombie' ? ZOMBIE_SPEED : PLAYER_SPEED);
       p.x = res.x;
       p.z = res.z;
       p.rotY = rt.input.rotY;

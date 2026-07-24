@@ -195,6 +195,8 @@ export class CityRoom extends Room<GameState> {
     // IP для антифарм-лимита: Colyseus берёт X-Real-IP/X-Forwarded-For (за nginx), иначе сокет; XFF-цепочку режем до клиента
     const rawIp = context?.ip;
     const ip = Array.isArray(rawIp) ? (rawIp[0] ?? '') : (rawIp ?? '').split(',')[0].trim();
+    const ban = this.db.getActiveBan(name, Date.now()) ?? this.db.getActiveIpBan(ip, Date.now());
+    if (ban) throw new Error(ban.until === null ? 'banned_perm' : 'banned'); // перманент и временный различаем кодом
     return { name, ip };
   }
 

@@ -100,7 +100,7 @@ describe('GameDB', () => {
   it('transfer: успех списывает и зачисляет, пишет историю', () => {
     db = new GameDB(':memory:');
     db.load('alice'); db.load('bob'); // по START_CASH
-    expect(db.transfer('alice', 'bob', 200, 5000)).toBe(true);
+    expect(db.transfer('alice', 'bob', 200, 5000, '')).toBe(true);
     expect(db.load('alice').cash).toBe(START_CASH - 200);
     expect(db.load('bob').cash).toBe(START_CASH + 200);
     const hist = db.getTransfers('bob', 10);
@@ -111,7 +111,7 @@ describe('GameDB', () => {
   it('transfer: нехватка средств — false, балансы и история не тронуты', () => {
     db = new GameDB(':memory:');
     db.load('alice'); db.load('bob');
-    expect(db.transfer('alice', 'bob', START_CASH + 1, 5000)).toBe(false);
+    expect(db.transfer('alice', 'bob', START_CASH + 1, 5000, '')).toBe(false);
     expect(db.load('alice').cash).toBe(START_CASH);
     expect(db.load('bob').cash).toBe(START_CASH);
     expect(db.getTransfers('alice', 10)).toHaveLength(0);
@@ -140,5 +140,78 @@ describe('GameDB', () => {
     expect(db.getRentDue('renter')).toBe(0);
     db.setRentDue('renter', 1_700_000_000_000);
     expect(db.getRentDue('renter')).toBe(1_700_000_000_000);
+  });
+});
+
+describe('playtime + transfer_log + модерация', () => {
+  it('playtime: по умолчанию 0, save/getPlaytime сохраняют значение', () => {
+    const db = new GameDB(':memory:');
+    db.load('pt1');
+    expect(db.getPlaytime('pt1')).toBe(0);
+    const rec = db.load('pt1');
+    rec.playtimeSec = 1234;
+    db.save(rec);
+    expect(db.getPlaytime('pt1')).toBe(1234);
+    db.close();
+  });
+
+  it('ipTransferSum: суммирует только свежие переводы с этого IP', () => {
+    const db = new GameDB(':memory:');
+    db.load('a'); db.load('b'); db.load('c');
+    const now = Date.now();
+    db.transfer('a', 'b', 300, now, '1.1.1.1');
+    db.transfer('a', 'b', 200, now - 25 * 3600_000, '1.1.1.1'); // старый — не считается
+    db.transfer('a', 'b', 500, now, '2.2.2.2');                  // другой IP — не считается
+    expect(db.ipTransferSum('1.1.1.1', now - 24 * 3600_000)).toBe(300);
+    expect(db.ipTransferSum('', now - 24 * 3600_000)).toBe(0);   // без IP лимит не считаем
+    db.close();
+  });
+
+  it('ban: активный по нику, истёкший — нет, unban снимает', () => {
+    const db = new GameDB(':memory:');
+    const now = Date.now();
+    db.ban('bad1', '1.2.3.4', 'спам', null, false);
+    expect(db.getActiveBan('bad1', now)).toEqual({ reason: 'спам', until: null });
+    expect(db.getActiveBan('good1', now)).toBeNull();
+    db.ban('temp1', '', 'х', now - 1000, false); // уже истёк
+    expect(db.getActiveBan('temp1', now)).toBeNull();
+    db.unban('bad1');
+    expect(db.getActiveBan('bad1', now)).toBeNull();
+    db.close();
+  });
+
+  it('getActiveIpBan: только byIp=1 и непустой IP', () => {
+    const db = new GameDB(':memory:');
+    const now = Date.now();
+    db.ban('soft', '9.9.9.9', 'x', null, false);  // byIp=0 — по IP не сработает
+    db.ban('hard', '1.1.1.1', 'x', null, true);
+    expect(db.getActiveIpBan('9.9.9.9', now)).toBeNull();
+    expect(db.getActiveIpBan('1.1.1.1', now)).not.toBeNull();
+    expect(db.getActiveIpBan('', now)).toBeNull();
+    db.close();
+  });
+
+  it('mute: активен до until, unmute снимает, listMutes отдаёт активные', () => {
+    const db = new GameDB(':memory:');
+    const now = Date.now();
+    db.mute('m1', now + 60_000, 'флуд');
+    expect(db.getActiveMute('m1', now)).toEqual({ until: now + 60_000, reason: 'флуд' });
+    expect(db.getActiveMute('m2', now)).toBeNull();
+    db.mute('m3', now - 1, 'старый');
+    expect(db.getActiveMute('m3', now)).toBeNull();
+    expect(db.listMutes(now).map(m => m.name)).toEqual(['m1']);
+    db.unmute('m1');
+    expect(db.getActiveMute('m1', now)).toBeNull();
+    db.close();
+  });
+
+  it('listBans отдаёт все баны', () => {
+    const db = new GameDB(':memory:');
+    db.ban('b1', '', 'r1', null, false);
+    db.ban('b2', '1.1.1.1', 'r2', Date.now() + 3600_000, true);
+    const rows = db.listBans();
+    expect(rows).toHaveLength(2);
+    expect(rows.find(r => r.name === 'b2')).toMatchObject({ ip: '1.1.1.1', byIp: 1 });
+    db.close();
   });
 });

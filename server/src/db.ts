@@ -12,6 +12,7 @@ export interface PlayerRecord {
   weapon: string;
   ammo: number;
   secret?: string; // токен владельца аккаунта (не попадает в реплицируемое состояние)
+  playtimeSec?: number; // наигрыш в секундах (колонка playtime_sec); антимультиаккаунт
 }
 
 export class GameDB {
@@ -44,6 +45,29 @@ export class GameDB {
         to_nick TEXT NOT NULL,
         amount INTEGER NOT NULL,
         ts INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS transfer_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_nick TEXT NOT NULL,
+        to_nick TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        ip TEXT NOT NULL DEFAULT '',
+        ts INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_transfer_log_ip ON transfer_log(ip, ts);
+      CREATE TABLE IF NOT EXISTS bans (
+        name TEXT PRIMARY KEY,
+        ip TEXT NOT NULL DEFAULT '',
+        reason TEXT NOT NULL DEFAULT '',
+        until INTEGER,
+        byIp INTEGER NOT NULL DEFAULT 0,
+        created INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_bans_ip ON bans(ip);
+      CREATE TABLE IF NOT EXISTS mutes (
+        name TEXT PRIMARY KEY,
+        until INTEGER NOT NULL,
+        reason TEXT NOT NULL DEFAULT ''
       )
     `);
     this.migrate();
@@ -57,6 +81,7 @@ export class GameDB {
     if (!has('ammo')) this.db.exec(`ALTER TABLE players ADD COLUMN ammo INTEGER NOT NULL DEFAULT 0`);
     if (!has('secret')) this.db.exec(`ALTER TABLE players ADD COLUMN secret TEXT NOT NULL DEFAULT ''`);
     if (!has('rent_due')) this.db.exec(`ALTER TABLE players ADD COLUMN rent_due INTEGER NOT NULL DEFAULT 0`);
+    if (!has('playtime_sec')) this.db.exec(`ALTER TABLE players ADD COLUMN playtime_sec INTEGER NOT NULL DEFAULT 0`);
   }
 
   load(name: string): PlayerRecord {
@@ -92,14 +117,82 @@ export class GameDB {
     this.db.prepare('UPDATE players SET rent_due = ? WHERE name = ?').run(Math.floor(ts), name);
   }
 
+  // наигрыш (сек) — порог для переводов; живёт в рантайме, сюда сбрасывается savePlayer'ом
+  getPlaytime(name: string): number {
+    const row = this.db.prepare('SELECT playtime_sec AS s FROM players WHERE name = ?').get(name) as { s: number } | undefined;
+    return row?.s ?? 0;
+  }
+
+  // сумма переводов с IP за окно (суточный антифарм-лимит). Без IP — 0 (лимит не срабатывает)
+  ipTransferSum(ip: string, sinceTs: number): number {
+    if (!ip) return 0;
+    const row = this.db.prepare(
+      'SELECT COALESCE(SUM(amount), 0) AS s FROM transfer_log WHERE ip = ? AND ts >= ?',
+    ).get(ip, sinceTs) as { s: number };
+    return row.s;
+  }
+
+  ban(name: string, ip: string, reason: string, until: number | null, byIp: boolean): void {
+    this.db.prepare(`
+      INSERT INTO bans (name, ip, reason, until, byIp, created) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(name) DO UPDATE SET ip = excluded.ip, reason = excluded.reason,
+        until = excluded.until, byIp = excluded.byIp, created = excluded.created
+    `).run(name, ip, reason, until, byIp ? 1 : 0, Date.now());
+  }
+
+  unban(name: string): void {
+    this.db.prepare('DELETE FROM bans WHERE name = ?').run(name);
+  }
+
+  getActiveBan(name: string, now: number): { reason: string; until: number | null } | null {
+    const row = this.db.prepare('SELECT reason, until FROM bans WHERE name = ?').get(name) as { reason: string; until: number | null } | undefined;
+    if (!row) return null;
+    if (row.until !== null && row.until <= now) return null; // истёк
+    return { reason: row.reason, until: row.until };
+  }
+
+  // жёсткий бан по IP — только строки с byIp=1 (NAT: осознанный opt-in админа)
+  getActiveIpBan(ip: string, now: number): { reason: string; until: number | null } | null {
+    if (!ip) return null;
+    const row = this.db.prepare('SELECT reason, until FROM bans WHERE ip = ? AND byIp = 1').get(ip) as { reason: string; until: number | null } | undefined;
+    if (!row) return null;
+    if (row.until !== null && row.until <= now) return null;
+    return { reason: row.reason, until: row.until };
+  }
+
+  listBans(): { name: string; ip: string; reason: string; until: number | null; byIp: number; created: number }[] {
+    return this.db.prepare('SELECT name, ip, reason, until, byIp, created FROM bans ORDER BY created DESC').all() as any[];
+  }
+
+  mute(name: string, until: number, reason: string): void {
+    this.db.prepare(`
+      INSERT INTO mutes (name, until, reason) VALUES (?, ?, ?)
+      ON CONFLICT(name) DO UPDATE SET until = excluded.until, reason = excluded.reason
+    `).run(name, Math.floor(until), reason);
+  }
+
+  unmute(name: string): void {
+    this.db.prepare('DELETE FROM mutes WHERE name = ?').run(name);
+  }
+
+  getActiveMute(name: string, now: number): { until: number; reason: string } | null {
+    const row = this.db.prepare('SELECT until, reason FROM mutes WHERE name = ?').get(name) as { until: number; reason: string } | undefined;
+    if (!row || row.until <= now) return null;
+    return { until: row.until, reason: row.reason };
+  }
+
+  listMutes(now: number): { name: string; until: number; reason: string }[] {
+    return this.db.prepare('SELECT name, until, reason FROM mutes WHERE until > ? ORDER BY until DESC').all(now) as any[];
+  }
+
   save(rec: PlayerRecord): void {
     this.db.prepare(`
-      INSERT INTO players (name, cash, safe, apt, kills, deaths, weapon, ammo)
-      VALUES (@name, @cash, @safe, @apt, @kills, @deaths, @weapon, @ammo)
+      INSERT INTO players (name, cash, safe, apt, kills, deaths, weapon, ammo, playtime_sec)
+      VALUES (@name, @cash, @safe, @apt, @kills, @deaths, @weapon, @ammo, @playtimeSec)
       ON CONFLICT(name) DO UPDATE SET
         cash = @cash, safe = @safe, apt = @apt, kills = @kills, deaths = @deaths,
-        weapon = @weapon, ammo = @ammo
-    `).run(rec);
+        weapon = @weapon, ammo = @ammo, playtime_sec = @playtimeSec
+    `).run({ playtimeSec: 0, ...rec });
   }
 
   hasPlayer(name: string): boolean {
@@ -156,12 +249,13 @@ export class GameDB {
     return rows.reverse(); // DESC выборку разворачиваем в хронологию
   }
 
-  transfer(from: string, to: string, amount: number, ts: number): boolean {
+  transfer(from: string, to: string, amount: number, ts: number, ip: string): boolean {
     const tx = this.db.transaction((): boolean => {
       const r = this.db.prepare('UPDATE players SET cash = cash - ? WHERE name = ? AND cash >= ?').run(amount, from, amount);
       if (r.changes === 0) return false;
       this.db.prepare('UPDATE players SET cash = cash + ? WHERE name = ?').run(amount, to);
       this.db.prepare('INSERT INTO transfers (from_nick, to_nick, amount, ts) VALUES (?, ?, ?, ?)').run(from, to, amount, ts);
+      this.db.prepare('INSERT INTO transfer_log (from_nick, to_nick, amount, ip, ts) VALUES (?, ?, ?, ?, ?)').run(from, to, amount, ip, ts);
       return true;
     });
     return tx();

@@ -1,4 +1,4 @@
-import { CHAT_MAX_LEN, CHAT_COOLDOWN_MS } from '@mmo/shared';
+import { CHAT_MAX_LEN, CHAT_COOLDOWN_MS, censor } from '@mmo/shared';
 import type { GameState } from '../schema/GameState.js';
 import type { Runtime } from '../runtime.js';
 
@@ -18,5 +18,5 @@ export function tryChat(
   if (trimmed.length === 0 || trimmed.length > CHAT_MAX_LEN) return null;
   if (now - rt.lastChatAt < CHAT_COOLDOWN_MS) return null;
   rt.lastChatAt = now;
-  return { from: p.name, text: trimmed, t: state.serverTime };
+  return { from: p.name, text: censor(trimmed), t: state.serverTime }; // мат — звёздочками
 }

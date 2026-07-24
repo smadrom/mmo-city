@@ -262,7 +262,7 @@ export class Phone {
   private smsErrorText(error: string): string {
     const texts: Record<string, string> = {
       bad_to: 'Некорректный ник', self: 'Нельзя писать себе', bad_text: 'Пустое или длинное сообщение',
-      cooldown: 'Не так быстро', no_such_user: 'Нет такого игрока',
+      cooldown: 'Не так быстро', no_such_user: 'Нет такого игрока', muted: 'Вы замьючены',
     };
     return texts[error] ?? 'Ошибка SMS';
   }

@@ -3,6 +3,7 @@ import { StateView } from '@colyseus/schema';
 import {
   TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
   SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY, RENT_INTERVAL_MS, WRITE_COOLDOWN_MS, PROTOCOL_VERSION,
+  CHAT_MAX_LEN, CHAT_COOLDOWN_MS, AUTOMUTE_VIOLATIONS, AUTOMUTE_WINDOW_MS, AUTOMUTE_MINUTES,
   createCityMap, dist2, type AABB, type CityMap,
 } from '@mmo/shared';
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
@@ -101,7 +102,21 @@ export class CityRoom extends Room<GameState> {
       adjustSafe(this.state, client.sessionId, -Math.floor(Math.abs(Number(data?.amount) || 0)));
     });
     this.onMessage('chat', (client, data) => {
-      const msg = tryChat(this.state, this.runtimes, client.sessionId, data?.text, Date.now());
+      const p = this.state.players.get(client.sessionId);
+      const rt = this.runtimes.get(client.sessionId);
+      if (!p || !rt) return;
+      const now = Date.now();
+      const mute = this.db.getActiveMute(p.name, now);
+      if (mute) {
+        client.send('notice', { text: `Вы замьючены до ${new Date(mute.until).toLocaleTimeString('ru-RU')}` });
+        return;
+      }
+      // засчитываем нарушение кулдауна до вызова tryChat (он молча гасит спам)
+      const text = typeof data?.text === 'string' ? data.text.trim() : '';
+      if (text && text.length <= CHAT_MAX_LEN && now - rt.lastChatAt < CHAT_COOLDOWN_MS) {
+        this.recordChatViolation(client.sessionId);
+      }
+      const msg = tryChat(this.state, this.runtimes, client.sessionId, data?.text, now);
       if (!msg) return;
       this.chatLog.push(msg);
       if (this.chatLog.length > CHAT_HISTORY) this.chatLog.shift();
@@ -303,6 +318,20 @@ export class CityRoom extends Room<GameState> {
     if (now - rt.lastWriteAt < WRITE_COOLDOWN_MS) return true;
     rt.lastWriteAt = now;
     return false;
+  }
+
+  // N срабатываний чат-кулдауна за окно → автомут (спам-флуд)
+  private recordChatViolation(id: string): void {
+    const rt = this.runtimes.get(id);
+    const p = this.state.players.get(id);
+    if (!rt || !p) return;
+    const now = Date.now();
+    rt.chatViolations = rt.chatViolations.filter(t => now - t < AUTOMUTE_WINDOW_MS);
+    rt.chatViolations.push(now);
+    if (rt.chatViolations.length >= AUTOMUTE_VIOLATIONS) {
+      rt.chatViolations = [];
+      this.db.mute(p.name, now + AUTOMUTE_MINUTES * 60_000, 'автомут: спам');
+    }
   }
 
   private findSessionByName(name: string): string | null {

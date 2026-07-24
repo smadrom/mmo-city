@@ -1,9 +1,9 @@
-import { SMS_MAX_LEN, SMS_COOLDOWN_MS } from '@mmo/shared';
+import { SMS_MAX_LEN, SMS_COOLDOWN_MS, censor } from '@mmo/shared';
 import type { GameState } from '../schema/GameState.js';
 import type { Runtime } from '../runtime.js';
 import type { GameDB } from '../db.js';
 
-export type SmsError = 'bad_to' | 'self' | 'bad_text' | 'cooldown' | 'no_such_user';
+export type SmsError = 'bad_to' | 'self' | 'bad_text' | 'cooldown' | 'no_such_user' | 'muted';
 export interface SmsOut { id: number; from: string; to: string; text: string; ts: number }
 
 export function trySms(
@@ -21,9 +21,10 @@ export function trySms(
   const toNick = typeof to === 'string' ? to.trim() : '';
   if (!toNick || toNick.length > 16) return { error: 'bad_to' };
   if (toNick === p.name) return { error: 'self' };
-  const t = typeof text === 'string' ? text.trim() : '';
+  const t = censor(typeof text === 'string' ? text.trim() : ''); // мат — звёздочками до записи в БД
   if (!t || t.length > SMS_MAX_LEN) return { error: 'bad_text' };
   if (now - rt.lastSmsAt < SMS_COOLDOWN_MS) return { error: 'cooldown' };
+  if (db.getActiveMute(p.name, now)) return { error: 'muted' };
   if (!db.hasPlayer(toNick)) return { error: 'no_such_user' };
   rt.lastSmsAt = now;
   const row = db.addSms(p.name, toNick, t, now);

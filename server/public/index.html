@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>MMO Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font: 14px/1.4 monospace; background: #111; color: #ddd; max-width: 960px; margin: 20px auto; padding: 0 12px; }
+  h1 { font-size: 18px; } h2 { font-size: 15px; margin-top: 24px; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid #333; padding: 4px 8px; text-align: left; }
+  th { background: #1c1c1c; }
+  button { background: #2a2a2a; color: #ddd; border: 1px solid #444; padding: 3px 10px; cursor: pointer; margin-right: 4px; }
+  button:hover { background: #3a3a3a; }
+  input { background: #1c1c1c; color: #ddd; border: 1px solid #444; padding: 5px 8px; }
+  #err { color: #f66; min-height: 1.2em; }
+  .muted { color: #888; }
+</style>
+</head>
+<body>
+<h1>MMO Admin</h1>
+<div id="auth">
+  Токен: <input id="token" type="password" size="40" placeholder="ADMIN_TOKEN">
+  <button onclick="saveToken()">Войти</button>
+</div>
+<div id="err"></div>
+<div id="app" style="display:none">
+  <h2>Онлайн <span id="count" class="muted"></span></h2>
+  <table id="players">
+    <tr><th>Ник</th><th>Кэш</th><th>Розыск</th><th>Наигрыш</th><th>IP</th><th>Действия</th></tr>
+  </table>
+  <h2>Баны</h2>
+  <table id="bans"><tr><th>Ник</th><th>IP</th><th>До</th><th>byIp</th><th>Причина</th><th></th></tr></table>
+  <h2>Муты</h2>
+  <table id="mutes"><tr><th>Ник</th><th>До</th><th>Причина</th><th></th></tr></table>
+</div>
+<script>
+let token = sessionStorage.getItem('admintoken') || '';
+const $ = (id) => document.getElementById(id);
+const err = (t) => { $('err').textContent = t || ''; };
+
+async function api(path, opts = {}) {
+  const res = await fetch('/admin/api' + path, {
+    ...opts,
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+  });
+  if (res.status === 401) { err('Неверный токен'); throw new Error('401'); }
+  if (!res.ok) { err('Ошибка ' + res.status); throw new Error(String(res.status)); }
+  return res.json();
+}
+
+function saveToken() {
+  token = $('token').value.trim();
+  sessionStorage.setItem('admintoken', token);
+  refresh();
+}
+
+async function act(path, body) {
+  err('');
+  await api(path, { method: 'POST', body: JSON.stringify(body) });
+  refresh();
+}
+
+function kick(name) { if (confirm(`Кикнуть ${name}?`)) act('/kick', { name }); }
+function mute(name) {
+  const minutes = Number(prompt(`Мут ${name} на сколько минут?`, '30'));
+  if (minutes > 0) act('/mute', { name, minutes, reason: prompt('Причина?', '') || '' });
+}
+function ban(name) {
+  const hours = Number(prompt(`Бан ${name}: часов (0 = навсегда)`, '0'));
+  if (isNaN(hours) || hours < 0) return;
+  const reason = prompt('Причина?', '') || '';
+  const byIp = confirm('Жёсткий бан по IP? (затронет всех с этим IP)');
+  act('/ban', { name, hours, reason, byIp });
+}
+function unban(name) { act('/unban', { name }); }
+function unmute(name) { act('/unmute', { name }); }
+
+const fmtUntil = (u) => u === null ? 'навсегда' : new Date(u).toLocaleString('ru-RU');
+const row = (cells) => '<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>';
+const esc = (s) => String(s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c])); // кавычки тоже — ники идут в inline-обработчики
+
+async function refresh() {
+  err('');
+  try {
+    const st = await api('/state');
+    $('app').style.display = '';
+    $('count').textContent = `(${st.playersOnline}/${st.maxClients}, аптайм ${st.uptimeSec}с)`;
+    $('players').innerHTML = '<tr><th>Ник</th><th>Кэш</th><th>Розыск</th><th>Наигрыш</th><th>IP</th><th>Действия</th></tr>'
+      + st.players.map(p => row([
+        esc(p.name), p.cash, p.wanted ? 'да' : '', Math.round(p.playtimeSec / 60) + ' мин', esc(p.ip),
+        `<button onclick="kick('${esc(p.name)}')">кик</button><button onclick="mute('${esc(p.name)}')">мут</button><button onclick="ban('${esc(p.name)}')">бан</button>`,
+      ])).join('');
+    const bans = await api('/bans');
+    $('bans').innerHTML = '<tr><th>Ник</th><th>IP</th><th>До</th><th>byIp</th><th>Причина</th><th></th></tr>'
+      + bans.items.map(b => row([esc(b.name), esc(b.ip), fmtUntil(b.until), b.byIp ? 'да' : '', esc(b.reason),
+        `<button onclick="unban('${esc(b.name)}')">снять</button>`])).join('');
+    const mutes = await api('/mutes');
+    $('mutes').innerHTML = '<tr><th>Ник</th><th>До</th><th>Причина</th><th></th></tr>'
+      + mutes.items.map(m => row([esc(m.name), fmtUntil(m.until), esc(m.reason),
+        `<button onclick="unmute('${esc(m.name)}')">снять</button>`])).join('');
+  } catch { /* ошибка уже показана в #err */ }
+}
+
+if (token) refresh();
+setInterval(() => { if (token) refresh(); }, 5000);
+</script>
+</body>
+</html>

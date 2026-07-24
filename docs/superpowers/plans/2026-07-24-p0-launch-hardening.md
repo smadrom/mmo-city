@@ -792,15 +792,17 @@ git commit -m "feat: одна комната — autoDispose=false, сервер
 
 ---
 
-### Task 5: onAuth — бан при входе + захват IP
+### Task 5: onAuth — бан при входе
+
+> **Поправка от контроллера (после ревью Task 3):** захват IP уже реализован в Task 3 через `AuthContext` Colyseus 0.16 (`onAuth(_client, options, context?: AuthContext)` возвращает `{ name, ip }`, `onJoin` пишет `rt.ip`). Плановая req-сигнатура от Colyseus ≤0.15 НЕПРИМЕНИМА. Задача сводится к добавлению бан-проверки в существующий `onAuth` + тесты.
 
 **Files:**
-- Modify: `server/src/rooms/CityRoom.ts` (`onAuth`, `onJoin`)
+- Modify: `server/src/rooms/CityRoom.ts` (`onAuth` — только бан-проверка)
 - Test: `server/test/ban.integration.test.ts` (новый)
 
 **Interfaces:**
-- Consumes: `GameDB.getActiveBan/getActiveIpBan/ban/unban` (Task 2); `Runtime.ip` (Task 3); клиентский текст `banned` (Task 4 Step 6).
-- Produces: `client.auth = { name: string; ip: string }`; ошибки входа `'banned' | 'banned_perm'`.
+- Consumes: `GameDB.getActiveBan/getActiveIpBan/ban/unban` (Task 2); `Runtime.ip` + IP в `client.auth` (Task 3); клиентский текст `banned` (Task 4 Step 6).
+- Produces: ошибки входа `'banned' | 'banned_perm'`.
 
 - [ ] **Step 1: Падающий тест**
 
@@ -872,40 +874,16 @@ describe('бан при входе (integration)', () => {
 Run: `cd server && npx vitest run test/ban.integration.test.ts`
 Expected: FAIL — вход не блокируется / `ip` пустой.
 
-- [ ] **Step 3: onAuth + onJoin**
+- [ ] **Step 3: onAuth — бан-проверка**
 
-В `server/src/rooms/CityRoom.ts` заменить метод `onAuth` целиком:
-
-```ts
-  // аутентификация: ник + секрет-токен. Существующий заклеймённый ник требует верный token.
-  onAuth(_client: Client, options: { name?: string; token?: string; ver?: number }, req?: import('node:http').IncomingMessage): { name: string; ip: string } {
-    // хендшейк версии: присланный, но несовпадающий ver отклоняем (устаревший клиент после бампа схемы)
-    if (options?.ver !== undefined && options.ver !== PROTOCOL_VERSION) throw new Error('bad_version');
-    const name = String(options?.name ?? '').slice(0, 16);
-    if (!name) throw new Error('need_name');
-    // IP за nginx — первый адрес из X-Forwarded-For; напрямую — remoteAddress. Нужен антифарм-лимиту и банам
-    const fwd = req?.headers?.['x-forwarded-for'];
-    const ip = ((typeof fwd === 'string' && fwd) ? fwd.split(',')[0].trim() : '') || req?.socket?.remoteAddress || '';
-    const now = Date.now();
-    const ban = this.db.getActiveBan(name, now) ?? this.db.getActiveIpBan(ip, now);
-    if (ban) throw new Error(ban.until === null ? 'banned_perm' : 'banned');
-    const auth = this.db.getAuth(name);
-    if (auth.exists && auth.secret && options?.token !== auth.secret) throw new Error('bad_token');
-    // один активный сеанс на ник: онлайн-дубль отклоняем. Замороженный призрак — исключение:
-    // это реконнект владельца (токен уже проверен выше), его вытеснит onJoin.
-    const existingId = this.findSessionByName(name);
-    if (existingId && !this.runtimes.get(existingId)?.frozen) throw new Error('name_online');
-    return { name, ip };
-  }
-```
-
-В `onJoin` после `rt.playtimeSec = this.db.getPlaytime(name);` (Task 3) добавить:
+В `server/src/rooms/CityRoom.ts`, в методе `onAuth` (уже возвращает `{ name, ip }` после Task 3): сразу после вычисления `ip` (строки с `rawIp`/`ip`) и ПЕРЕД `return { name, ip };` вставить:
 
 ```ts
-    rt.ip = (client.auth as { name: string; ip?: string }).ip ?? ''; // захвачен в onAuth
+    const ban = this.db.getActiveBan(name, Date.now()) ?? this.db.getActiveIpBan(ip, Date.now());
+    if (ban) throw new Error(ban.until === null ? 'banned_perm' : 'banned'); // перманент и временный различаем кодом
 ```
 
-(тип распаковки `client.auth` в начале onJoin оставить — `(client.auth as { name: string }).name` работает, поле ip читаем отдельно.)
+(Порядок не критичен — бан можно проверять и раньше; важно, что `ip` к этому моменту уже вычислен. `onJoin` менять не нужно: `rt.ip` пишется с Task 3.)
 
 - [ ] **Step 4: Прогнать — зелёное**
 

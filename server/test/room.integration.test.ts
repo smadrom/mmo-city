@@ -352,4 +352,13 @@ describe('CityRoom (integration)', () => {
     await new Promise(r => setTimeout(r, 400));
     expect(room.state.players.get(id)?.z).toBe(zBefore); // заморожен: input=up, но не движется
   });
+
+  it('kickByName дисконнектит игрока (admin)', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c = await testServer.connectTo(room, { name: 'kickme', role: 'citizen' });
+    expect((room as any).kickByName('kickme')).toBe(true);
+    await new Promise(r => setTimeout(r, 300));
+    expect(room.state.players.has(c.sessionId)).toBe(false);
+    expect((room as any).kickByName('nobody')).toBe(false);
+  });
 });

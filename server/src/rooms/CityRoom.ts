@@ -9,6 +9,7 @@ import {
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
 import { makeRuntime, type Runtime } from '../runtime.js';
 import { GameDB } from '../db.js';
+import { registerRoom, clearRoom } from '../admin/registry.js';
 import { tickMovement } from '../systems/movement.js';
 import { tickVehicles, tryEnterCar, tryExitCar, type CarRuntime } from '../systems/vehicles.js';
 import { handleAttack, tickRespawn, type AttackResult } from '../systems/combat.js';
@@ -39,6 +40,7 @@ export class CityRoom extends Room<GameState> {
 
   onCreate(options?: { maxClients?: number }): void {
     if (options?.maxClients) this.maxClients = options.maxClients; // тесты поднимают комнату с маленьким лимитом
+    registerRoom(this); // админ-API и /healthz
     this.map = createCityMap();
     this.colliders = this.map.buildings.map(b => ({ x: b.x, z: b.z, w: b.w, d: b.d }));
     this.db = new GameDB(process.env.GAME_DB ?? 'game.db');
@@ -279,6 +281,7 @@ export class CityRoom extends Room<GameState> {
   onDispose(): void {
     this.state.players.forEach((_p, id) => this.savePlayer(id));
     this.db.close();
+    clearRoom();
   }
 
   private removePlayer(id: string): void {
@@ -340,6 +343,35 @@ export class CityRoom extends Room<GameState> {
       if (!found && pl.name === name && pl.role !== 'zombie') found = id;
     });
     return found;
+  }
+
+  // --- админ-API (server/src/admin/routes.ts) ---
+  get gameDb(): GameDB { return this.db; }
+
+  adminState(): {
+    players: { name: string; cash: number; wanted: boolean; playtimeSec: number; ip: string }[];
+    playersOnline: number; maxClients: number; uptimeSec: number;
+  } {
+    const players: { name: string; cash: number; wanted: boolean; playtimeSec: number; ip: string }[] = [];
+    this.state.players.forEach((p, id) => {
+      if (p.role === 'zombie') return;
+      const rt = this.runtimes.get(id);
+      players.push({
+        name: p.name,
+        cash: p.cash,
+        wanted: p.wantedUntil > Date.now(),
+        playtimeSec: rt?.playtimeSec ?? 0,
+        ip: rt?.ip ?? '',
+      });
+    });
+    return { players, playersOnline: players.length, maxClients: this.maxClients, uptimeSec: Math.floor(process.uptime()) };
+  }
+
+  kickByName(name: string): boolean {
+    const id = this.findSessionByName(name);
+    if (!id) return false;
+    this.clients.find(c => c.sessionId === id)?.leave(4000); // 4000 = consented, без окна реконнекта
+    return true;
   }
 
   private broadcastAttack(res: AttackResult): void {

@@ -1,5 +1,5 @@
 // Игровые константы. Единый источник правды для сервера и клиента.
-export const PROTOCOL_VERSION = 1; // хендшейк схемы/сообщений; инкрементить при изменении Player/протокола
+export const PROTOCOL_VERSION = 2; // хендшейк схемы/сообщений; инкрементить при изменении Player/протокола
 export const TICK_RATE = 20;
 export const MAP_HALF = 200; // мир 400x400, координаты от -200 до 200
 
@@ -94,3 +94,12 @@ export const WRITE_COOLDOWN_MS = 500; // антиспам дешёвых пиш�
 export const MINIMAP_SIZE = 200;  // px, диаметр круга
 export const MINIMAP_RADIUS = 60; // метров обзора от центра
 export const FULLMAP_MAX_ZOOM = 6; // кратность от «весь город влез»
+
+// антимультиаккаунт: переводы после 30 мин наигрыша + суточный лимит по IP
+export const TRANSFER_MIN_PLAYTIME_SEC = 1800;
+export const TRANSFER_IP_DAILY_LIMIT = 1000; // $ с одного IP за 24 ч
+
+// автомут: N срабатываний чат-кулдауна за окно → мут
+export const AUTOMUTE_VIOLATIONS = 5;
+export const AUTOMUTE_WINDOW_MS = 60_000;
+export const AUTOMUTE_MINUTES = 10;

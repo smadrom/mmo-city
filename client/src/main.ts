@@ -37,7 +37,9 @@ async function start(role: string): Promise<void> {
       ? 'Этот ник уже занят другим игроком'
       : msg.includes('bad_version')
       ? 'Обновите страницу (новая версия сервера)'
-      : 'Не удалось подключиться (сервер полон или недоступен)';
+      : msg.includes('banned')
+      ? 'Аккаунт заблокирован'
+      : 'Сервер полон (100/100) или недоступен — попробуйте позже';
     return;
   }
   joinScreen.style.display = 'none';

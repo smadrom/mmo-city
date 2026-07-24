@@ -24,6 +24,7 @@ const SAVE_INTERVAL_MS = 5000;
 
 export class CityRoom extends Room<GameState> {
   maxClients = MAX_PLAYERS;
+  autoDispose = false; // единственная комната живёт вечно (создаётся сервером при старте)
 
   private map!: CityMap;
   private colliders!: AABB[];
@@ -35,7 +36,8 @@ export class CityRoom extends Room<GameState> {
   private chatLog: ChatMessage[] = [];
   private pickupRuntime = new Map<string, PickupRuntime>();
 
-  onCreate(): void {
+  onCreate(options?: { maxClients?: number }): void {
+    if (options?.maxClients) this.maxClients = options.maxClients; // тесты поднимают комнату с маленьким лимитом
     this.map = createCityMap();
     this.colliders = this.map.buildings.map(b => ({ x: b.x, z: b.z, w: b.w, d: b.d }));
     this.db = new GameDB(process.env.GAME_DB ?? 'game.db');

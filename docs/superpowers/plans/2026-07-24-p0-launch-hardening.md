@@ -1569,7 +1569,7 @@ function unmute(name) { act('/unmute', { name }); }
 
 const fmtUntil = (u) => u === null ? 'навсегда' : new Date(u).toLocaleString('ru-RU');
 const row = (cells) => '<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>';
-const esc = (s) => String(s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+const esc = (s) => String(s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c])); // кавычки тоже — ники идут в inline-обработчики
 
 async function refresh() {
   err('');

@@ -1,4 +1,4 @@
-import { Room, type Client } from 'colyseus';
+import { Room, type Client, type AuthContext } from 'colyseus';
 import { StateView } from '@colyseus/schema';
 import {
   TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
@@ -31,6 +31,7 @@ export class CityRoom extends Room<GameState> {
   private runtimes = new Map<string, Runtime>();
   private carRuntime = new Map<string, CarRuntime>();
   private lastSaveAt = 0;
+  private lastPlaytimeAt = 0; // 0 → первый тик сразу начисляет минуту всем онлайн
   private chatLog: ChatMessage[] = [];
   private pickupRuntime = new Map<string, PickupRuntime>();
 
@@ -148,8 +149,10 @@ export class CityRoom extends Room<GameState> {
     });
     this.onMessage('transfer', (client, data) => {
       if (this.writeRateLimited(client.sessionId)) return;
+      const rt = this.runtimes.get(client.sessionId);
+      if (!rt) return;
       this.savePlayer(client.sessionId); // синк БД с авторитетной памятью: иначе db.transfer (WHERE cash>=amount) даёт ложный no_money после свежего заработка
-      const res = tryTransfer(this.state, this.db, client.sessionId, data?.to, data?.amount, Date.now());
+      const res = tryTransfer(this.state, this.db, client.sessionId, data?.to, data?.amount, Date.now(), { playtimeSec: rt.playtimeSec, ip: rt.ip });
       client.send('transferResult', { ok: res.ok, error: res.error, balance: res.balance });
       if (res.ok && res.toNick && res.amount) {
         const from = this.state.players.get(client.sessionId)?.name ?? '';
@@ -176,7 +179,7 @@ export class CityRoom extends Room<GameState> {
   }
 
   // аутентификация: ник + секрет-токен. Существующий заклеймённый ник требует верный token.
-  onAuth(_client: Client, options: { name?: string; token?: string; ver?: number }): { name: string } {
+  onAuth(_client: Client, options: { name?: string; token?: string; ver?: number }, context?: AuthContext): { name: string; ip: string } {
     // хендшейк версии: присланный, но несовпадающий ver отклоняем (устаревший клиент после бампа схемы)
     if (options?.ver !== undefined && options.ver !== PROTOCOL_VERSION) throw new Error('bad_version');
     const name = String(options?.name ?? '').slice(0, 16);
@@ -187,7 +190,10 @@ export class CityRoom extends Room<GameState> {
     // это реконнект владельца (токен уже проверен выше), его вытеснит onJoin.
     const existingId = this.findSessionByName(name);
     if (existingId && !this.runtimes.get(existingId)?.frozen) throw new Error('name_online');
-    return { name };
+    // IP для антифарм-лимита: Colyseus берёт X-Real-IP/X-Forwarded-For (за nginx), иначе сокет; XFF-цепочку режем до клиента
+    const rawIp = context?.ip;
+    const ip = Array.isArray(rawIp) ? (rawIp[0] ?? '') : (rawIp ?? '').split(',')[0].trim();
+    return { name, ip };
   }
 
   onJoin(client: Client, options: { name?: string; role?: string }): void {
@@ -228,6 +234,8 @@ export class CityRoom extends Room<GameState> {
     const rt = makeRuntime(Date.now());
     rt.kills = rec.kills;
     rt.deaths = rec.deaths;
+    rt.playtimeSec = this.db.getPlaytime(name); // наигрыш переживает релог
+    rt.ip = (client.auth as { name: string; ip?: string }).ip ?? ''; // из onAuth — антифарм-лимит переводов по IP
     rt.nextRentAt = this.db.getRentDue(name) || (Date.now() + RENT_INTERVAL_MS); // рента переживает релог
     rt.salaryAnchorX = p.x; // якорь патруля = точка спавна
     rt.salaryAnchorZ = p.z;
@@ -276,7 +284,7 @@ export class CityRoom extends Room<GameState> {
     if (!p || !rt) return;
     if (p.role === 'zombie') return; // зомби не персистентны
     try {
-      this.db.save({ name: p.name, cash: p.cash, safe: p.safe, apt: p.apt, kills: rt.kills, deaths: rt.deaths, weapon: p.weapon, ammo: p.ammo });
+      this.db.save({ name: p.name, cash: p.cash, safe: p.safe, apt: p.apt, kills: rt.kills, deaths: rt.deaths, weapon: p.weapon, ammo: p.ammo, playtimeSec: rt.playtimeSec });
       this.db.setRentDue(p.name, rt.nextRentAt); // персистим срок ренты → релог не обнуляет
     } catch (err) {
       console.error('[city] db save error', err);
@@ -350,6 +358,10 @@ export class CityRoom extends Room<GameState> {
     tickPolice(this.state, this.runtimes, now, dt, this.map);
     tickDelivery(this.state, this.map, now);
     tickRent(this.state, this.runtimes, now);
+    if (now - this.lastPlaytimeAt > 60_000) { // наигрыш для порога переводов (антимультиаккаунт)
+      this.runtimes.forEach((rt) => { rt.playtimeSec += 60; });
+      this.lastPlaytimeAt = now;
+    }
     if (now - this.lastSaveAt > SAVE_INTERVAL_MS) {
       this.state.players.forEach((_p, id) => this.savePlayer(id));
       this.lastSaveAt = now;

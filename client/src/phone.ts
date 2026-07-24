@@ -271,6 +271,8 @@ export class Phone {
     const texts: Record<string, string> = {
       bad_amount: 'Сумма от 1 до 100000', self: 'Нельзя себе',
       no_such_user: 'Нет такого игрока', no_money: 'Не хватает наличных',
+      need_playtime: 'Переводы доступны после 30 минут игры',
+      ip_limit: 'Дневной лимит переводов с вашего IP исчерпан',
     };
     return texts[error] ?? 'Ошибка перевода';
   }

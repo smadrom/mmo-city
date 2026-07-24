@@ -105,6 +105,7 @@ describe('Телефон (integration)', () => {
     const p2 = room.state.players.get(c2.sessionId);
     p1.cash = 500;
     (room as any).savePlayer(c1.sessionId); // фиксируем 500 в БД
+    (room as any).runtimes.get(c1.sessionId).playtimeSec = 99999; // обход порога 30 мин (антимультиаккаунт)
     let result: any = null;
     let incoming: any = null;
     c1.onMessage('transferResult', (m) => { result = m; });
@@ -123,6 +124,7 @@ describe('Телефон (integration)', () => {
     const c2 = await testServer.connectTo(room, { name: 'fresh2', role: 'citizen' });
     // заработок только в памяти: БД ещё на START_CASH (savePlayer не вызывали)
     room.state.players.get(c1.sessionId).cash = 900;
+    (room as any).runtimes.get(c1.sessionId).playtimeSec = 99999; // обход порога 30 мин (антимультиаккаунт)
     let result: any = null;
     c1.onMessage('transferResult', (m) => { result = m; });
     c1.send('transfer', { to: 'fresh2', amount: 700 }); // > START_CASH, но ≤ памяти
@@ -139,6 +141,7 @@ describe('Телефон (integration)', () => {
     const p1 = room.state.players.get(c1.sessionId);
     p1.cash = 50;
     (room as any).savePlayer(c1.sessionId);
+    (room as any).runtimes.get(c1.sessionId).playtimeSec = 99999; // обход порога 30 мин (антимультиаккаунт)
     let result: any = null;
     c1.onMessage('transferResult', (m) => { result = m; });
     c1.send('transfer', { to: 'poor2', amount: 100 });
@@ -169,6 +172,7 @@ describe('Телефон (integration)', () => {
     const c2 = await testServer.connectTo(room, { name: 'th2', role: 'citizen' });
     room.state.players.get(c1.sessionId).cash = 500;
     (room as any).savePlayer(c1.sessionId);
+    (room as any).runtimes.get(c1.sessionId).playtimeSec = 99999; // обход порога 30 мин (антимультиаккаунт)
     c1.onMessage('transferResult', () => {});
     c1.send('transfer', { to: 'th2', amount: 50 });
     await wait(200);

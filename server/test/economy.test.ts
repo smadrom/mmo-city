@@ -89,6 +89,9 @@ describe('переводы', () => {
     return { state, p, db };
   }
 
+  // обход порога наигрыша: эти тесты — про деньги, не про антифарм
+  const guard = { playtimeSec: 99999, ip: '' };
+
   it('успех: state и БД обоих обновлены, возврат balance', () => {
     const { state, p, db } = setupTransfer();
     db.save({ name: 'payer', cash: 500, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 });
@@ -96,7 +99,7 @@ describe('переводы', () => {
     payee.name = 'payee';
     payee.cash = 100;
     state.players.set('s2', payee);
-    const res = tryTransfer(state, db, 's1', 'payee', 200, 7000);
+    const res = tryTransfer(state, db, 's1', 'payee', 200, 7000, guard);
     expect(res).toMatchObject({ ok: true, balance: 300, toNick: 'payee', amount: 200 });
     expect(p.cash).toBe(300);
     expect(payee.cash).toBe(300); // 100 + 200
@@ -107,7 +110,7 @@ describe('переводы', () => {
   it('нехватка средств → no_money, ничего не меняется', () => {
     const { state, p, db } = setupTransfer();
     db.save({ name: 'payer', cash: 500, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 });
-    const res = tryTransfer(state, db, 's1', 'payee', 501, 7000);
+    const res = tryTransfer(state, db, 's1', 'payee', 501, 7000, guard);
     expect(res).toMatchObject({ ok: false, error: 'no_money' });
     expect(p.cash).toBe(500);
     expect(db.load('payer').cash).toBe(500);
@@ -115,19 +118,19 @@ describe('переводы', () => {
 
   it('валидация: bad_amount / self / no_such_user', () => {
     const { state, db } = setupTransfer();
-    expect(tryTransfer(state, db, 's1', 'payee', 0, 1000).error).toBe('bad_amount');
-    expect(tryTransfer(state, db, 's1', 'payee', -50, 1000).error).toBe('bad_amount');
-    expect(tryTransfer(state, db, 's1', 'payee', 10.5, 1000).error).toBe('bad_amount');
-    expect(tryTransfer(state, db, 's1', 'payee', TRANSFER_MAX + 1, 1000).error).toBe('bad_amount');
-    expect(tryTransfer(state, db, 's1', 'payer', 10, 1000).error).toBe('self');
-    expect(tryTransfer(state, db, 's1', 'ghost', 10, 1000).error).toBe('no_such_user');
+    expect(tryTransfer(state, db, 's1', 'payee', 0, 1000, guard).error).toBe('bad_amount');
+    expect(tryTransfer(state, db, 's1', 'payee', -50, 1000, guard).error).toBe('bad_amount');
+    expect(tryTransfer(state, db, 's1', 'payee', 10.5, 1000, guard).error).toBe('bad_amount');
+    expect(tryTransfer(state, db, 's1', 'payee', TRANSFER_MAX + 1, 1000, guard).error).toBe('bad_amount');
+    expect(tryTransfer(state, db, 's1', 'payer', 10, 1000, guard).error).toBe('self');
+    expect(tryTransfer(state, db, 's1', 'ghost', 10, 1000, guard).error).toBe('no_such_user');
   });
 
   it('state авторитетен: перевод после траты в state (БД отстаёт) → no_money', () => {
     const { state, p, db } = setupTransfer();
     // БД ещё хранит START_CASH=500 (savePlayer не было), в state уже потрачено
     p.cash = 100;
-    const res = tryTransfer(state, db, 's1', 'payee', 400, 7000);
+    const res = tryTransfer(state, db, 's1', 'payee', 400, 7000, guard);
     expect(res).toMatchObject({ ok: false, error: 'no_money' });
     expect(p.cash).toBe(100);
     expect(db.load('payer').cash).toBe(START_CASH);

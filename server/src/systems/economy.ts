@@ -1,6 +1,6 @@
 import {
   DELIVERY_REWARD, DELIVERY_TIME_MS, DELIVERY_PICKUP_DIST, DELIVERY_DROP_DIST,
-  TRANSFER_MIN, TRANSFER_MAX,
+  TRANSFER_MIN, TRANSFER_MAX, TRANSFER_MIN_PLAYTIME_SEC, TRANSFER_IP_DAILY_LIMIT,
   dist2, type CityMap,
 } from '@mmo/shared';
 import type { GameState, Player } from '../schema/GameState.js';
@@ -64,7 +64,7 @@ export function tickDelivery(state: GameState, map: CityMap, now: number): void 
   });
 }
 
-export type TransferError = 'bad_amount' | 'self' | 'no_such_user' | 'no_money';
+export type TransferError = 'bad_amount' | 'self' | 'no_such_user' | 'no_money' | 'need_playtime' | 'ip_limit';
 
 export function tryTransfer(
   state: GameState,
@@ -73,9 +73,11 @@ export function tryTransfer(
   to: unknown,
   amount: unknown,
   now: number,
+  guard: { playtimeSec: number; ip: string }, // антимультиаккаунт: наигрыш отправителя + его IP
 ): { ok: boolean; error?: TransferError; balance?: number; toNick?: string; amount?: number } {
   const p = state.players.get(playerId);
   if (!p) return { ok: false, error: 'no_money' };
+  if (guard.playtimeSec < TRANSFER_MIN_PLAYTIME_SEC) return { ok: false, error: 'need_playtime' };
   const sum = typeof amount === 'number' ? amount : Number(amount);
   if (!Number.isInteger(sum) || sum < TRANSFER_MIN || sum > TRANSFER_MAX) return { ok: false, error: 'bad_amount' };
   const toNick = typeof to === 'string' ? to.trim() : '';
@@ -83,7 +85,8 @@ export function tryTransfer(
   if (toNick === p.name) return { ok: false, error: 'self' };
   if (!db.hasPlayer(toNick)) return { ok: false, error: 'no_such_user' };
   if (p.cash < sum) return { ok: false, error: 'no_money' }; // state авторитетен: БД отстаёт до 5с (savePlayer)
-  if (!db.transfer(p.name, toNick, sum, now, '')) return { ok: false, error: 'no_money' }; // IP-заглушка: реальный IP подставит Task 3
+  if (db.ipTransferSum(guard.ip, now - 24 * 3600_000) + sum > TRANSFER_IP_DAILY_LIMIT) return { ok: false, error: 'ip_limit' };
+  if (!db.transfer(p.name, toNick, sum, now, guard.ip)) return { ok: false, error: 'no_money' };
   p.cash -= sum;
   state.players.forEach((pl) => { if (pl.name === toNick) pl.cash += sum; });
   return { ok: true, balance: p.cash, toNick, amount: sum };

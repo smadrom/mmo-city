@@ -4,7 +4,7 @@ import { connect, reconnect } from './net.js';
 import { Avatars } from './avatars.js';
 import { InputController, isTypingTarget } from './input.js';
 import { Prediction } from './prediction.js';
-import { updateCamera } from './camera.js';
+import { updateCamera, CAM_MIN, CAM_MAX } from './camera.js';
 import { UI } from './ui.js';
 import { Effects } from './effects.js';
 import { Pickups } from './pickups.js';
@@ -101,7 +101,14 @@ function bootGame(room: Room): void {
   const overlay = document.getElementById('reconnectOverlay')!;
   let current = room;
   let lastCarId = '';
+  let camDist = 7;
   let reconnecting = false;
+
+  // зум колёсиком — только когда не открыта карта/телефон и не печатаем
+  window.addEventListener('wheel', (e) => {
+    if (fullmap.isOpen || phone.isOpen || isTypingTarget()) return;
+    camDist = Math.min(CAM_MAX, Math.max(CAM_MIN, camDist + Math.sign(e.deltaY)));
+  }, { passive: true });
 
   phone.onOpen = () => fullmap.close();
   fullmap.onOpen = () => phone.close();
@@ -186,7 +193,7 @@ function bootGame(room: Room): void {
     if (me) {
       const predicted = prediction.update(dt, input.current, me.mode, me.x, me.z);
       avatars.selfPos = predicted ? { x: prediction.x, z: prediction.z } : null;
-      updateCamera(camera, avatars.selfPos?.x ?? me.x, avatars.selfPos?.z ?? me.z, input.yaw);
+      updateCamera(camera, avatars.selfPos?.x ?? me.x, avatars.selfPos?.z ?? me.z, input.yaw, camDist, input.aiming && document.pointerLockElement !== null, dt);
     }
     avatars.update(dt);
     effects.update(me ?? undefined);

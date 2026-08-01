@@ -34,7 +34,15 @@ export function buildWorld(scene: THREE.Scene): CityMap {
 
   const sun = new THREE.DirectionalLight(0xffffff, 1.2);
   sun.position.set(100, 200, 50);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -220;
+  sun.shadow.camera.right = 220;
+  sun.shadow.camera.top = 220;
+  sun.shadow.camera.bottom = -220;
+  sun.shadow.camera.far = 600;
   scene.add(sun);
+  scene.add(sun.target); // цель — центр города (0,0,0)
   scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
   const ground = new THREE.Mesh(
@@ -42,6 +50,7 @@ export function buildWorld(scene: THREE.Scene): CityMap {
     new THREE.MeshLambertMaterial({ color: 0x4a7c3a }),
   );
   ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
   scene.add(ground);
 
   const roadMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
@@ -92,6 +101,7 @@ export function buildWorld(scene: THREE.Scene): CityMap {
       new THREE.MeshLambertMaterial({ color: b.color }),
     );
     mesh.position.set(b.x, b.h / 2, b.z);
+    mesh.castShadow = true;
     scene.add(mesh);
     const label = makeTextSprite(kindLabel(b.kind));
     label.position.set(b.x, b.h + 3, b.z);

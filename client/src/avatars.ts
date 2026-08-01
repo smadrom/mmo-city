@@ -87,12 +87,14 @@ function makePlayerMesh(name: string, role: string): PlayerMesh {
     new THREE.MeshLambertMaterial({ color: 0x888888 }),
   );
   body.position.y = 0.9;
+  body.castShadow = true;
   group.add(body);
   const head = new THREE.Mesh(
     new THREE.SphereGeometry(0.3, 12, 8),
     new THREE.MeshLambertMaterial({ color: 0xffcc99 }),
   );
   head.position.y = 1.9;
+  head.castShadow = true;
   group.add(head);
   const marker = new THREE.Mesh(
     new THREE.ConeGeometry(0.4, 0.8, 4),
@@ -150,6 +152,7 @@ function makeCarMesh(): CarMesh {
     new THREE.MeshLambertMaterial({ color: 0xcc3333 }),
   );
   body.position.y = 0.55;
+  body.castShadow = true;
   group.add(body);
   const cabin = new THREE.Mesh(
     new THREE.BoxGeometry(1.6, 0.6, 1.8),

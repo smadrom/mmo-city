@@ -78,6 +78,8 @@ async function waitLiveState(room: Room): Promise<void> {
 
 function bootGame(room: Room): void {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.shadowMap.enabled = true; // тени — главный объём города; в настройках отключаются («низкое» качество)
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // чёткость на Retina; кап 2 — перф
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);

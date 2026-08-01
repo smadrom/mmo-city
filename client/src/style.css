@@ -218,3 +218,9 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
   border-radius: 50%; border: 30px solid transparent;
   border-top-color: rgba(255, 40, 40, .8); pointer-events: none;
 }
+
+#debug {
+  position: absolute; top: 40px; right: 10px; color: #9f9; font-size: 12px;
+  font-family: monospace; background: rgba(0,0,0,.5); padding: 4px 8px;
+  border-radius: 4px; pointer-events: none;
+}

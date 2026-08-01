@@ -372,6 +372,16 @@ describe('CityRoom (integration)', () => {
     expect(room.state.players.get(id)?.z).toBe(zBefore); // заморожен: input=up, но не движется
   });
 
+  it('ping отвечает pong с тем же payload', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'pinger', role: 'citizen' });
+    let got: any = null;
+    c1.onMessage('pong', (m) => { got = m; });
+    c1.send('ping', { t: 12345 });
+    await new Promise(r => setTimeout(r, 200));
+    expect(got).toEqual({ t: 12345 });
+  });
+
   it('kickByName дисконнектит игрока (admin)', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     const c = await testServer.connectTo(room, { name: 'kickme', role: 'citizen' });

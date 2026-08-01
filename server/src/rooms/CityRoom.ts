@@ -196,6 +196,7 @@ export class CityRoom extends Room<GameState> {
       rt.lastLbAt = now;
       client.send('leaderboard', { items: this.db.topByKills(10) });
     });
+    this.onMessage('ping', (client, data) => client.send('pong', data)); // эхо для RTT-метрики клиента (F3)
     this.onMessage('jobTake', (client) => {
       const rt = this.runtimes.get(client.sessionId);
       if (!rt) return;

@@ -110,6 +110,26 @@ function bootGame(room: Room): void {
     camDist = Math.min(CAM_MAX, Math.max(CAM_MIN, camDist + Math.sign(e.deltaY)));
   }, { passive: true });
 
+  // F3 — FPS/пинг (пинг: эхо ping/pong раз в 2 с, только когда панель видна)
+  const debugEl = document.getElementById('debug')!;
+  let debugOn = false;
+  let frames = 0;
+  let fpsAt = performance.now();
+  let fps = 0;
+  let rtt = 0;
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'F3' && !e.repeat && !isTypingTarget()) {
+      debugOn = !debugOn;
+      debugEl.classList.toggle('hidden', !debugOn);
+    }
+  });
+  let pingT = 0;
+  setInterval(() => {
+    if (!debugOn) return;
+    pingT = performance.now();
+    current.send('ping', { t: pingT });
+  }, 2000);
+
   phone.onOpen = () => fullmap.close();
   fullmap.onOpen = () => phone.close();
   feed.bind(current);
@@ -137,6 +157,9 @@ function bootGame(room: Room): void {
     r.onMessage('delivered', (m: { reward: number }) => {
       ui.showToast(`+${m.reward}$`); // сумма числом — универсально для обоих языков
       effects.cashIn();
+    });
+    r.onMessage('pong', (m: { t?: number }) => {
+      if (typeof m?.t === 'number' && m.t === pingT) rtt = Math.round(performance.now() - m.t);
     });
     r.onLeave((code) => void onLeave(code));
   };
@@ -222,6 +245,16 @@ function bootGame(room: Room): void {
       phone.update();
     }
     renderer.render(scene, camera);
+    if (debugOn) {
+      frames++;
+      const nowMs = performance.now();
+      if (nowMs - fpsAt >= 500) {
+        fps = Math.round(frames * 1000 / (nowMs - fpsAt));
+        frames = 0;
+        fpsAt = nowMs;
+        debugEl.textContent = `${fps} FPS · ${rtt} ms`;
+      }
+    }
   });
 }
 

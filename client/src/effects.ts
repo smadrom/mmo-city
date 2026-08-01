@@ -17,6 +17,10 @@ export class Effects {
   private damageNumbers: DamageNumber[] = [];
   private vignette = document.getElementById('vignette')!;
   private vignetteTimer = 0;
+  private hitmarker = document.getElementById('hitmarker')!;
+  private hitmarkerTimer = 0;
+  private dmgDir = document.getElementById('dmgDir')!;
+  private dmgDirTimer = 0;
   private audio: AudioContext | null = null;
   muted = localStorage.getItem('mute') === '1'; // публичное: main.ts читает для тоста
   private prevMode = '';
@@ -97,8 +101,14 @@ export class Effects {
 
   private onHit(msg: { victim: string; attacker?: string; damage: number; x: number; z: number }): void {
     const myId = this.room.sessionId;
-    if (msg.attacker === myId && msg.victim !== myId) this.tone(880, 0.05, 'square', 0.05); // я попал
-    if (msg.victim === myId) this.tone(140, 0.15, 'sawtooth', 0.09); // по мне
+    if (msg.attacker === myId && msg.victim !== myId) {
+      this.tone(880, 0.05, 'square', 0.05); // я попал
+      this.flashHitmarker();
+    }
+    if (msg.victim === myId) {
+      this.tone(140, 0.15, 'sawtooth', 0.09); // по мне
+      this.showDamageFrom(msg.attacker ?? '');
+    }
     const canvas = document.createElement('canvas');
     canvas.width = 128;
     canvas.height = 64;
@@ -116,6 +126,26 @@ export class Effects {
     sprite.position.set(msg.x + (Math.random() - 0.5) * 0.6, 2.3, msg.z);
     this.scene.add(sprite);
     this.damageNumbers.push({ sprite, bornAt: performance.now() });
+  }
+
+  // белый × в центре на 150 мс — подтверждение своего попадания
+  private flashHitmarker(): void {
+    this.hitmarker.classList.remove('hidden');
+    clearTimeout(this.hitmarkerTimer);
+    this.hitmarkerTimer = window.setTimeout(() => this.hitmarker.classList.add('hidden'), 150);
+  }
+
+  // красный клин со стороны атакующего (400 мс): угол = направление на него относительно моего rotY
+  private showDamageFrom(attackerId: string): void {
+    const me = (this.room.state.players as any).get(this.room.sessionId);
+    const att = attackerId ? (this.room.state.players as any).get(attackerId) : null;
+    if (!me || !att) return;
+    const ang = Math.atan2(att.x - me.x, att.z - me.z) - me.rotY;
+    // π - ang: 0 = атакующий прямо по курсу (клин сверху), проверено по осям (rotY: forward=(-sin,-cos))
+    this.dmgDir.style.transform = `translate(-50%, -50%) rotate(${Math.PI - ang}rad)`;
+    this.dmgDir.classList.remove('hidden');
+    clearTimeout(this.dmgDirTimer);
+    this.dmgDirTimer = window.setTimeout(() => this.dmgDir.classList.add('hidden'), 400);
   }
 
   update(me?: { mode: string }): void {

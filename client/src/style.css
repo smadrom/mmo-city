@@ -207,3 +207,14 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
 #btnRun { right: 40px; bottom: 200px; }
 #btnPhone { right: 130px; bottom: 130px; }
 #btnMap { right: 210px; bottom: 40px; }
+
+#hitmarker {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  color: #fff; font-size: 30px; font-weight: bold; text-shadow: 0 0 4px #000;
+  pointer-events: none;
+}
+#dmgDir {
+  position: absolute; top: 50%; left: 50%; width: 120px; height: 120px;
+  border-radius: 50%; border: 30px solid transparent;
+  border-top-color: rgba(255, 40, 40, .8); pointer-events: none;
+}

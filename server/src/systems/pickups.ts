@@ -35,6 +35,16 @@ export function spawnCashDrop(state: GameState, x: number, z: number, amount: nu
   state.pickups.set(id, pk);
 }
 
+// дроп оружия с трупа: как деньги — без runtime, после подбора удаляется (не респаунится)
+export function spawnWeaponDrop(state: GameState, x: number, z: number, kind: string, id: string): void {
+  const pk = new Pickup();
+  pk.id = id;
+  pk.kind = kind;
+  pk.x = x;
+  pk.z = z;
+  state.pickups.set(id, pk);
+}
+
 export function tickPickups(state: GameState, runtimes: Map<string, PickupRuntime>, now: number): void {
   state.pickups.forEach((pk, id) => {
     if (!pk.active) {
@@ -59,13 +69,17 @@ export function tickPickups(state: GameState, runtimes: Map<string, PickupRuntim
         p.ammo = Math.min(AMMO_MAX, p.ammo + AMMO_PACK_SIZE);
       } else {
         p.weapon = pk.kind; // замена без возврата, как покупка
-        if (WEAPONS[pk.kind as WeaponKind].ranged) {
+        if (WEAPONS[pk.kind as WeaponKind]?.ranged) {
           p.ammo = Math.min(AMMO_MAX, p.ammo + AMMO_PACK_SIZE);
         }
       }
-      pk.active = false;
       const rt = runtimes.get(id);
-      if (rt) rt.respawnAt = now + PICKUP_RESPAWN_MS;
+      pk.active = false; // защита от двойного подбора в один тик, как у cash
+      if (!rt) {
+        state.pickups.delete(id); // дроп с трупа — подобрали и нет, респаун только у регулярных
+        return;
+      }
+      rt.respawnAt = now + PICKUP_RESPAWN_MS;
     });
   });
 }

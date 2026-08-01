@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GameState, Player } from '../src/schema/GameState.js';
 import { makeRuntime, type Runtime } from '../src/runtime.js';
-import { handleAttack, tickRespawn } from '../src/systems/combat.js';
+import { handleAttack, killPlayer, tickRespawn } from '../src/systems/combat.js';
 import { PUNCH_DAMAGE, MAX_HP, WANTED_DURATION_MS, DEATH_CASH_LOSS, RESPAWN_DELAY_MS, WEAPONS, createCityMap, ZOMBIE_DAMAGE, ZOMBIE_HP, ZOMBIE_RESPAWN_MS } from '@mmo/shared';
 
 function setup() {
@@ -287,5 +287,51 @@ describe('бой', () => {
     expect(v.hp).toBe(ZOMBIE_HP);
     const onSpawn = map.zombieSpawns.some(s => s.x === v.x && s.z === v.z);
     expect(onSpawn).toBe(true);
+  });
+});
+
+describe('дропы при смерти', () => {
+  function setupKill() {
+    const state = new GameState();
+    const runtimes = new Map();
+    const killer = new Player();
+    killer.name = 'killer';
+    state.players.set('k', killer);
+    runtimes.set('k', makeRuntime(0));
+    const victim = new Player();
+    victim.name = 'victim';
+    victim.hp = 10;
+    state.players.set('v', victim);
+    runtimes.set('v', makeRuntime(0));
+    return { state, runtimes, killer, victim };
+  }
+
+  it('с игрока падает его оружие пикапом', () => {
+    const { state, runtimes, victim } = setupKill();
+    victim.weapon = 'rifle';
+    victim.cash = 0;
+    killPlayer(state, runtimes, 'k', 'v', 1000);
+    const drops = [...state.pickups.values()].filter(pk => pk.kind === 'rifle');
+    expect(drops).toHaveLength(1);
+    expect(victim.weapon).toBe('');
+  });
+
+  it('с зомби падает 10-29$ (PvE-фарм), убийце-зомби — ничего', () => {
+    const { state, runtimes, victim } = setupKill();
+    victim.role = 'zombie';
+    victim.cash = 0;
+    killPlayer(state, runtimes, 'k', 'v', 1000);
+    const drops = [...state.pickups.values()].filter(pk => pk.kind === 'cash');
+    expect(drops).toHaveLength(1);
+    expect(drops[0].amount).toBeGreaterThanOrEqual(10);
+    expect(drops[0].amount).toBeLessThanOrEqual(29);
+  });
+
+  it('без оружия — без оружейного дропа', () => {
+    const { state, runtimes, victim } = setupKill();
+    victim.weapon = '';
+    victim.cash = 0;
+    killPlayer(state, runtimes, 'k', 'v', 1000);
+    expect([...state.pickups.values()].filter(pk => pk.kind !== 'cash')).toHaveLength(0);
   });
 });

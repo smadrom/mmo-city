@@ -7,7 +7,7 @@ import {
 } from '@mmo/shared';
 import type { GameState } from '../schema/GameState.js';
 import type { Runtime } from '../runtime.js';
-import { spawnCashDrop } from './pickups.js';
+import { spawnCashDrop, spawnWeaponDrop } from './pickups.js';
 
 export interface Shot {
   from: Point;
@@ -118,6 +118,17 @@ export function killPlayer(
   const drop = Math.floor(victim.cash * DEATH_CASH_LOSS);
   victim.cash -= drop;
   if (drop > 0) spawnCashDrop(state, victim.x, victim.z, drop, `cash-${victimId}-${now}`);
+  if (victim.role !== 'zombie' && victim.weapon) {
+    // трофей: оружие жертвы падает пикапом — охота за стволами, а не молчаливое сжигание
+    spawnWeaponDrop(state, victim.x, victim.z, victim.weapon, `wpn-${victimId}-${now}`);
+  }
+  if (victim.role === 'zombie' && killerId && killerId !== victimId) {
+    const killer = state.players.get(killerId);
+    if (killer && killer.role !== 'zombie') {
+      // PvE-фарм кладбища: 10-29$ с зомби, иначе зомби — чистый негатив без награды
+      spawnCashDrop(state, victim.x, victim.z, 10 + Math.floor(Math.random() * 20), `zcash-${victimId}-${now}`);
+    }
+  }
   victim.mode = 'dead';
   victim.hp = 0;
   victim.cargo = false;

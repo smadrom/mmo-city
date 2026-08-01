@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GameState, Player } from '../src/schema/GameState.js';
-import { spawnPickups, tickPickups, spawnCashDrop, type PickupRuntime } from '../src/systems/pickups.js';
+import { spawnPickups, tickPickups, spawnCashDrop, spawnWeaponDrop, type PickupRuntime } from '../src/systems/pickups.js';
 import { AMMO_MAX, AMMO_PACK_SIZE, PICKUP_RESPAWN_MS, createCityMap } from '@mmo/shared';
 
 const map = createCityMap();
@@ -64,6 +64,21 @@ describe('пикапы', () => {
     tickPickups(state, runtimes, 1000);
     expect(p.cash).toBe(350);
     expect(state.pickups.has('cash-v-1')).toBe(false);
+  });
+
+  it('дроп (пикап без runtime) после подбора удаляется, а не респаунится', () => {
+    const state = new GameState();
+    const p = new Player();
+    p.name = 'looter';
+    p.mode = 'foot';
+    state.players.set('s1', p);
+    spawnWeaponDrop(state, p.x, p.z, 'bat', 'wpn-test');
+    const runtimes = new Map(); // пусто: дроп runtime-записи не имеет
+    tickPickups(state, runtimes, 1000);
+    expect(p.weapon).toBe('bat');
+    expect(state.pickups.has('wpn-test')).toBe(false);
+    tickPickups(state, runtimes, 1000 + PICKUP_RESPAWN_MS + 1);
+    expect(state.pickups.has('wpn-test')).toBe(false);
   });
 
   it('респаун регулярного пикапа через PICKUP_RESPAWN_MS со сменой вида (из 4)', () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GameState, Player } from '../src/schema/GameState.js';
 import { makeRuntime, type Runtime } from '../src/runtime.js';
-import { handleAttack, killPlayer, tickRespawn } from '../src/systems/combat.js';
+import { handleAttack, killPlayer, tickRespawn, type KillEvent } from '../src/systems/combat.js';
 import { PUNCH_DAMAGE, MAX_HP, WANTED_DURATION_MS, DEATH_CASH_LOSS, RESPAWN_DELAY_MS, WEAPONS, createCityMap, ZOMBIE_DAMAGE, ZOMBIE_HP, ZOMBIE_RESPAWN_MS } from '@mmo/shared';
 
 function setup() {
@@ -287,6 +287,43 @@ describe('бой', () => {
     expect(v.hp).toBe(ZOMBIE_HP);
     const onSpawn = map.zombieSpawns.some(s => s.x === v.x && s.z === v.z);
     expect(onSpawn).toBe(true);
+  });
+});
+
+describe('bounty', () => {
+  function setupWanted() {
+    const state = new GameState();
+    const runtimes = new Map();
+    const hunter = new Player();
+    hunter.name = 'hunter';
+    hunter.cash = 100;
+    state.players.set('h', hunter);
+    runtimes.set('h', makeRuntime(0));
+    const crim = new Player();
+    crim.name = 'crim';
+    crim.hp = 10;
+    crim.cash = 0;
+    state.players.set('c', crim);
+    runtimes.set('c', makeRuntime(0));
+    return { state, runtimes, hunter, crim };
+  }
+
+  it('убийство розыскного: +25$ и без розыска охотнику, событие bounty', () => {
+    const { state, runtimes, hunter, crim } = setupWanted();
+    crim.wantedUntil = 5000;
+    const events: KillEvent[] = [];
+    killPlayer(state, runtimes, 'h', 'c', 1000, events);
+    expect(hunter.cash).toBe(125); // 100 + BOUNTY_REWARD
+    expect(hunter.wantedUntil).toBe(0);
+    expect(events).toEqual([{ killerId: 'h', victimId: 'c', bounty: true }]);
+  });
+
+  it('убийство чистого: розыск охотнику, событие kill', () => {
+    const { state, runtimes, hunter } = setupWanted();
+    const events: KillEvent[] = [];
+    killPlayer(state, runtimes, 'h', 'c', 1000, events);
+    expect(hunter.wantedUntil).toBe(1000 + WANTED_DURATION_MS);
+    expect(events[0].bounty).toBe(false);
   });
 });
 

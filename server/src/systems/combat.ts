@@ -1,6 +1,6 @@
 import {
   PUNCH_RANGE, PUNCH_DAMAGE, PUNCH_COOLDOWN_MS, MAX_HP,
-  DEATH_CASH_LOSS, WANTED_DURATION_MS, RESPAWN_DELAY_MS,
+  DEATH_CASH_LOSS, WANTED_DURATION_MS, RESPAWN_DELAY_MS, BOUNTY_REWARD,
   ZOMBIE_DAMAGE, ZOMBIE_HP, ZOMBIE_RESPAWN_MS,
   WEAPONS, segmentHitsAABB, segmentAABBEnterT, dist2, inAnyAABB,
   type AABB, type CityMap, type Point, type WeaponKind,
@@ -27,6 +27,7 @@ export function handleAttack(
   now: number,
   colliders: AABB[],
   safeZones: AABB[] = [],
+  events?: KillEvent[],
 ): AttackResult {
   const a = state.players.get(attackerId);
   const art = runtimes.get(attackerId);
@@ -76,7 +77,7 @@ export function handleAttack(
     victim.hp -= damage;
     const vrt = runtimes.get(bestId);
     if (vrt) vrt.lastDamageAt = now;
-    if (victim.hp <= 0) killPlayer(state, runtimes, attackerId, bestId, now);
+    if (victim.hp <= 0) killPlayer(state, runtimes, attackerId, bestId, now, events);
     return {
       attacker: attackerId,
       shot: { from: { x: a.x, z: a.z }, to: { x: victim.x, z: victim.z }, hit: true, victim: bestId },
@@ -91,9 +92,11 @@ export function handleAttack(
   if (!victim || !vrt) return { ...NO_ATTACK, attacker: attackerId, swing: true };
   victim.hp -= damage;
   vrt.lastDamageAt = now;
-  if (victim.hp <= 0) killPlayer(state, runtimes, attackerId, bestId, now);
+  if (victim.hp <= 0) killPlayer(state, runtimes, attackerId, bestId, now, events);
   return { attacker: attackerId, shot: null, swing: true, hits: [{ victim: bestId, damage, x: victim.x, z: victim.z }] };
 }
+
+export interface KillEvent { killerId: string; victimId: string; bounty: boolean }
 
 export function killPlayer(
   state: GameState,
@@ -101,6 +104,7 @@ export function killPlayer(
   killerId: string,
   victimId: string,
   now: number,
+  events?: KillEvent[],
 ): void {
   const victim = state.players.get(victimId);
   const vrt = runtimes.get(victimId);
@@ -141,8 +145,13 @@ export function killPlayer(
   if (killerId && killerId !== victimId) {
     const killer = state.players.get(killerId);
     const krt = runtimes.get(killerId);
-    if (killer && killer.role !== 'zombie' && victim.role !== 'zombie') killer.wantedUntil = now + WANTED_DURATION_MS; // зомби розыск не получают и за зомби розыска нет
+    const bounty = !!killer && killer.role !== 'zombie' && victim.role !== 'zombie' && victim.wantedUntil > now;
+    if (killer && killer.role !== 'zombie' && victim.role !== 'zombie' && !bounty) {
+      killer.wantedUntil = now + WANTED_DURATION_MS; // зомби розыск не получают и за зомби розыска нет
+    }
+    if (bounty && killer) killer.cash += BOUNTY_REWARD; // праведное убийство: награда вместо розыска
     if (krt) krt.kills++;
+    events?.push({ killerId, victimId, bounty });
   }
 }
 

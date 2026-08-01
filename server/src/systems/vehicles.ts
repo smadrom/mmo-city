@@ -6,7 +6,7 @@ import {
 } from '@mmo/shared';
 import type { GameState, Car } from '../schema/GameState.js';
 import type { Runtime } from '../runtime.js';
-import { killPlayer, type Hit } from './combat.js';
+import { killPlayer, type Hit, type KillEvent } from './combat.js';
 
 export interface CarRuntime { emptySince: number }
 
@@ -19,6 +19,7 @@ export function tickVehicles(
   now: number,
   parkingSpots: ParkingSpot[],
   safeZones: AABB[] = [],
+  events?: KillEvent[],
 ): Hit[] {
   const hits: Hit[] = [];
   state.cars.forEach((car, id) => {
@@ -87,7 +88,7 @@ export function tickVehicles(
           v.hp -= damage;
           vrt.lastDamageAt = now;
           hits.push({ victim: vid, damage, x: v.x, z: v.z });
-          if (v.hp <= 0) killPlayer(state, runtimes, car.driverId, vid, now);
+          if (v.hp <= 0) killPlayer(state, runtimes, car.driverId, vid, now, events);
         });
       }
     } else {

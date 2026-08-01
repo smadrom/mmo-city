@@ -12,7 +12,8 @@ export function tickPolice(
   now: number,
   dt: number,
   map: CityMap,
-): void {
+): { cop: string; crim: string }[] {
+  const arrests: { cop: string; crim: string }[] = [];
   // Зарплаты
   state.players.forEach((p, id) => {
     const rt = runtimes.get(id);
@@ -72,6 +73,7 @@ export function tickPolice(
     crt.arrestProgress = 0;
     const cop = state.players.get(copId);
     if (cop) cop.cash += ARREST_BONUS;
+    arrests.push({ cop: cop?.name ?? '', crim: crim.name }); // ники для feed-сообщения об аресте
   });
 
   // Освобождение
@@ -83,4 +85,5 @@ export function tickPolice(
       p.hp = MAX_HP;
     }
   });
+  return arrests;
 }

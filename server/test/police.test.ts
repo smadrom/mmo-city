@@ -28,13 +28,14 @@ describe('полиция', () => {
     tickPolice(state, runtimes, 1000, 1, map);
     tickPolice(state, runtimes, 2000, 1, map);
     expect(crim.mode).toBe('foot'); // ещё не арестован
-    tickPolice(state, runtimes, 3000, 1, map);
+    const arrests = tickPolice(state, runtimes, 3000, 1, map);
     expect(crim.mode).toBe('jail');
     expect(crim.x).toBe(map.jailCell.x);
     expect(crim.cash).toBe(Math.floor(400 * (1 - ARREST_CASH_LOSS)));
     expect(crim.wantedUntil).toBe(0);
     expect(crim.jailUntil).toBe(3000 + JAIL_TIME_MS);
     expect(cop.cash).toBe(copCash + ARREST_BONUS);
+    expect(arrests).toEqual([{ cop: 'cop', crim: 'crim' }]); // feed «арест» берёт ники из возврата
   });
 
   it('прогресс ареста сбрасывается, если коп отошёл', () => {

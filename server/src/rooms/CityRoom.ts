@@ -12,7 +12,7 @@ import { GameDB } from '../db.js';
 import { registerRoom, clearRoom } from '../admin/registry.js';
 import { tickMovement } from '../systems/movement.js';
 import { tickVehicles, tryEnterCar, tryExitCar, type CarRuntime } from '../systems/vehicles.js';
-import { handleAttack, tickRespawn, type AttackResult } from '../systems/combat.js';
+import { handleAttack, tickRespawn, type AttackResult, type KillEvent } from '../systems/combat.js';
 import { spawnPickups, tickPickups, type PickupRuntime } from '../systems/pickups.js';
 import { spawnZombies, tickZombies } from '../systems/zombies.js';
 import { tickPolice } from '../systems/police.js';
@@ -83,8 +83,10 @@ export class CityRoom extends Room<GameState> {
       };
     });
     this.onMessage('attack', (client) => {
-      const res = handleAttack(this.state, this.runtimes, client.sessionId, Date.now(), this.colliders, this.map.safeZones);
+      const events: KillEvent[] = [];
+      const res = handleAttack(this.state, this.runtimes, client.sessionId, Date.now(), this.colliders, this.map.safeZones, events);
       this.broadcastAttack(res);
+      this.broadcastKillEvents(events);
     });
     this.onMessage('buyWeapon', (client, data) => {
       const reason = tryBuyWeapon(this.state, client.sessionId, String(data?.kind ?? ''), this.map);
@@ -384,6 +386,16 @@ export class CityRoom extends Room<GameState> {
     for (const h of res.hits) this.broadcast('hit', h);
   }
 
+  // kill feed: убийства (и bounty) — общий broadcast ников
+  private broadcastKillEvents(events: KillEvent[]): void {
+    for (const ev of events) {
+      const a = this.state.players.get(ev.killerId)?.name;
+      const b = this.state.players.get(ev.victimId)?.name;
+      if (!a || !b) continue;
+      this.broadcast('feed', { kind: ev.bounty ? 'bounty' : 'kill', a, b });
+    }
+  }
+
   private handleInteract(client: Client): void {
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
@@ -419,13 +431,16 @@ export class CityRoom extends Room<GameState> {
     const now = Date.now();
     this.state.serverTime = now;
     tickMovement(this.state, this.runtimes, this.colliders, dt, now);
-    const carHits = tickVehicles(this.state, this.runtimes, this.carRuntime, this.colliders, dt, now, this.map.parkingSpots, this.map.safeZones);
+    const killEvents: KillEvent[] = [];
+    const carHits = tickVehicles(this.state, this.runtimes, this.carRuntime, this.colliders, dt, now, this.map.parkingSpots, this.map.safeZones, killEvents);
     for (const h of carHits) this.broadcast('hit', h);
-    const zombieAttacks = tickZombies(this.state, this.runtimes, this.map, this.colliders, now);
+    const zombieAttacks = tickZombies(this.state, this.runtimes, this.map, this.colliders, now, killEvents);
     for (const res of zombieAttacks) this.broadcastAttack(res);
+    this.broadcastKillEvents(killEvents);
     tickPickups(this.state, this.pickupRuntime, now);
     tickRespawn(this.state, this.runtimes, this.map, now);
-    tickPolice(this.state, this.runtimes, now, dt, this.map);
+    const arrests = tickPolice(this.state, this.runtimes, now, dt, this.map);
+    for (const a of arrests) this.broadcast('feed', { kind: 'arrest', a: a.cop, b: a.crim });
     tickDelivery(this.state, this.map, now, this.runtimes);
     tickRent(this.state, this.runtimes, now);
     if (now - this.lastPlaytimeAt > 60_000) { // наигрыш для порога переводов (антимультиаккаунт)

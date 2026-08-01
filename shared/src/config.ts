@@ -41,6 +41,7 @@ export const ARREST_RANGE = 3;
 export const ARREST_TIME_MS = 3000;
 export const ARREST_CASH_LOSS = 0.25;
 export const ARREST_BONUS = 150; // арест должен быть выгоден — иначе коп худшая роль
+export const BOUNTY_REWARD = 25; // за убийство розыскного; праведное — розыск не даём
 export const JAIL_TIME_MS = 2 * 60_000;
 export const COP_SALARY = 50;
 export const COP_SALARY_INTERVAL_MS = 5 * 60_000;

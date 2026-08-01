@@ -4,7 +4,7 @@ import {
 } from '@mmo/shared';
 import { GameState, Player } from '../schema/GameState.js';
 import { makeRuntime, type Runtime } from '../runtime.js';
-import { handleAttack, type AttackResult } from './combat.js';
+import { handleAttack, type AttackResult, type KillEvent } from './combat.js';
 
 export function spawnZombies(state: GameState, runtimes: Map<string, Runtime>, map: CityMap, now: number): void {
   for (let i = 0; i < ZOMBIE_COUNT; i++) {
@@ -26,6 +26,7 @@ export function tickZombies(
   map: CityMap,
   colliders: AABB[],
   now: number,
+  events?: KillEvent[],
 ): AttackResult[] {
   const results: AttackResult[] = [];
   state.players.forEach((z, id) => {
@@ -72,7 +73,7 @@ export function tickZombies(
       inp.rotY = Math.atan2(-(t.x - z.x), -(t.z - z.z)); // forward = (-sin, -cos)
       z.rotY = inp.rotY; // handleAttack целится по a.rotY — разворачиваем зомби сразу
       if (best <= PUNCH_RANGE * PUNCH_RANGE) {
-        const res = handleAttack(state, runtimes, id, now, colliders, map.safeZones);
+        const res = handleAttack(state, runtimes, id, now, colliders, map.safeZones, events);
         if (res.swing || res.hits.length > 0) results.push(res);
       }
     } else {

@@ -19,7 +19,7 @@ export const CAR_PARK_RETURN_MS = 5 * 60_000;
 
 export const WEAPONS = {
   bat:    { name: 'Бита',     price: 150,  damage: 35, range: 2.5, cooldownMs: 800, ranged: false },
-  pistol: { name: 'Пистолет', price: 600,  damage: 15, range: 40,  cooldownMs: 400, ranged: true  },
+  pistol: { name: 'Пистолет', price: 600,  damage: 25, range: 40,  cooldownMs: 400, ranged: true  },
   rifle:  { name: 'Винтовка', price: 2000, damage: 12, range: 80,  cooldownMs: 120, ranged: true  },
 } as const;
 export type WeaponKind = keyof typeof WEAPONS; // 'bat' | 'pistol' | 'rifle'
@@ -40,7 +40,7 @@ export const WANTED_DURATION_MS = 3 * 60_000;
 export const ARREST_RANGE = 3;
 export const ARREST_TIME_MS = 3000;
 export const ARREST_CASH_LOSS = 0.25;
-export const ARREST_BONUS = 50;
+export const ARREST_BONUS = 150; // арест должен быть выгоден — иначе коп худшая роль
 export const JAIL_TIME_MS = 2 * 60_000;
 export const COP_SALARY = 50;
 export const COP_SALARY_INTERVAL_MS = 5 * 60_000;

@@ -130,7 +130,11 @@ function bootGame(room: Room): void {
       await new Promise(r => setTimeout(r, 1000));
       try {
         const fresh = await reconnect(token);
-        await waitLiveState(fresh);
+        // fresh может умереть до первого живого патча — без таймаута цикл повис бы навсегда
+        await Promise.race([
+          waitLiveState(fresh),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('state_timeout')), 2000)),
+        ]);
         current = fresh;
         avatars.rebind(fresh);
         pickups.rebind(fresh);

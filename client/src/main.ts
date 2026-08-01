@@ -270,6 +270,14 @@ function bootGame(room: Room): void {
       }
     }
   });
+
+  // онбординг — один раз на браузер, три подсказки с паузами
+  if (!localStorage.getItem('seenIntro')) {
+    localStorage.setItem('seenIntro', '1');
+    (['hint.move', 'hint.car', 'hint.wanted'] as const).forEach((key, i) => {
+      setTimeout(() => ui.showToast(t(key)), 1000 + i * 4000);
+    });
+  }
 }
 
 document.getElementById('joinCitizen')!.addEventListener('click', () => void start('citizen'));

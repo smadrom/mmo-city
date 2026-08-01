@@ -81,7 +81,7 @@ function bootGame(room: Room): void {
   const pickups = new Pickups(scene, room);
   const mapRenderer = new CityMapRenderer(map);
   const fullmap = new Fullmap(mapRenderer, input);
-  const phone = new Phone(room, map, input, (t) => ui.showToast(t), () => avatars.serverNow());
+  const phone = new Phone(room, map, input, (text) => ui.showToast(text), () => avatars.serverNow());
   room.onMessage('notice', (m: { code?: string; until?: number; text?: string }) => {
     if (m?.code === 'muted' && m.until) {
       const locale = getLang() === 'ru' ? 'ru-RU' : 'en-US';

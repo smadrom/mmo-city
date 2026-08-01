@@ -57,7 +57,8 @@ export class UI {
       this.shopDialog.classList.remove('hidden');
     });
     room.onMessage('shopResult', (msg: any) => {
-      this.showToast(msg.ok ? t('shop.ok') : t(`shop.${msg.reason}`));
+      const key = `shop.${msg.reason}`;
+      this.showToast(msg.ok ? t('shop.ok') : (t(key) === key ? t('shop.error') : t(key))); // неизвестный reason — общий fallback
     });
     const items = document.getElementById('shopItems')!;
     for (const kind of Object.keys(WEAPONS) as WeaponKind[]) {

@@ -2,13 +2,11 @@ import * as THREE from 'three';
 import { createCityMap, ROADS, ROAD_WIDTH, MAP_HALF, type CityMap, type Point, type BuildingDef } from '@mmo/shared';
 import { t } from './i18n/index.js';
 
-// значения через t() при импорте модуля — язык выбирается на экране входа, до buildWorld
-const KIND_LABELS: Record<BuildingDef['kind'], string> = {
-  hospital: t('world.hospital'),
-  police: t('world.police'),
-  warehouse: t('world.warehouse'),
-  house: t('world.house'),
-};
+// t() вызывается при построении мира (после выбора языка на экране входа),
+// а не при импорте модуля — иначе подписи застрянут на языке загрузки страницы
+function kindLabel(kind: BuildingDef['kind']): string {
+  return t(`world.${kind}`);
+}
 
 function makeTextSprite(text: string): THREE.Sprite {
   const canvas = document.createElement('canvas');
@@ -95,7 +93,7 @@ export function buildWorld(scene: THREE.Scene): CityMap {
     );
     mesh.position.set(b.x, b.h / 2, b.z);
     scene.add(mesh);
-    const label = makeTextSprite(KIND_LABELS[b.kind]);
+    const label = makeTextSprite(kindLabel(b.kind));
     label.position.set(b.x, b.h + 3, b.z);
     scene.add(label);
   }

@@ -10,12 +10,16 @@ let lang: Lang = (() => {
   if (saved === 'ru' || saved === 'en') return saved;
   return navigator.language.toLowerCase().startsWith('ru') ? 'ru' : 'en';
 })();
+// начальный <html lang> — до первого setLang
+document.documentElement.lang = lang;
 
 export function getLang(): Lang { return lang; }
 
 export function setLang(l: Lang): void {
   lang = l;
   localStorage.setItem('lang', l);
+  // <html lang> следует языку — скринридеры и :lang()-селекторы
+  document.documentElement.lang = l;
 }
 
 // отсутствующий ключ: fallback ru → сам ключ (заметно в dev)

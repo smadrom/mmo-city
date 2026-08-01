@@ -45,7 +45,10 @@ export function spawnWeaponDrop(state: GameState, x: number, z: number, kind: st
   state.pickups.set(id, pk);
 }
 
-export function tickPickups(state: GameState, runtimes: Map<string, PickupRuntime>, now: number): void {
+export interface PickedEvent { playerId: string; kind: string; amount: number }
+
+export function tickPickups(state: GameState, runtimes: Map<string, PickupRuntime>, now: number): PickedEvent[] {
+  const events: PickedEvent[] = [];
   state.pickups.forEach((pk, id) => {
     if (!pk.active) {
       const rt = runtimes.get(id);
@@ -55,13 +58,14 @@ export function tickPickups(state: GameState, runtimes: Map<string, PickupRuntim
       }
       return;
     }
-    state.players.forEach((p) => {
+    state.players.forEach((p, pid) => {
       if (!pk.active) return;
       if (p.mode !== 'foot' || p.role === 'zombie') return;
       if (dist2(p.x, p.z, pk.x, pk.z) > PICKUP_RADIUS * PICKUP_RADIUS) return;
       if (pk.kind === 'cash') {
         p.cash += pk.amount;
         pk.active = false; // защита от двойного подбора в один тик
+        events.push({ playerId: pid, kind: 'cash', amount: pk.amount });
         state.pickups.delete(id);
         return;
       }
@@ -73,6 +77,7 @@ export function tickPickups(state: GameState, runtimes: Map<string, PickupRuntim
           p.ammo = Math.min(AMMO_MAX, p.ammo + AMMO_PACK_SIZE);
         }
       }
+      events.push({ playerId: pid, kind: pk.kind, amount: 0 });
       const rt = runtimes.get(id);
       pk.active = false; // защита от двойного подбора в один тик, как у cash
       if (!rt) {
@@ -82,4 +87,5 @@ export function tickPickups(state: GameState, runtimes: Map<string, PickupRuntim
       rt.respawnAt = now + PICKUP_RESPAWN_MS;
     });
   });
+  return events;
 }

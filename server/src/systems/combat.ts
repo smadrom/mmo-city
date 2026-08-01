@@ -16,7 +16,7 @@ export interface Shot {
   victim: string; // sessionId цели, '' при промахе
 }
 
-export interface Hit { victim: string; damage: number; x: number; z: number }
+export interface Hit { victim: string; damage: number; x: number; z: number; attacker?: string } // attacker — sessionId атакующего (наезд/выстрел), клиентскому звуку
 export interface AttackResult { attacker: string; shot: Shot | null; swing: boolean; hits: Hit[] }
 const NO_ATTACK = { shot: null, swing: false, hits: [] as Hit[] };
 

@@ -54,7 +54,8 @@ describe('доставка', () => {
     const target = map.deliveryTargets.find(t => t.id === p.deliveryTarget)!;
     const expected = deliveryReward(map, target.id);
     p.x = target.x; p.z = target.z;
-    tickDelivery(state, map, 2000, runtimes);
+    const delivered = tickDelivery(state, map, 2000, runtimes);
+    expect(delivered).toEqual([{ playerId: 's1', reward: expected }]);
     expect(p.cargo).toBe(false);
     expect(p.cash).toBe(expected);
     expect(p.deliveryTarget).toBe('');
@@ -80,7 +81,7 @@ describe('доставка', () => {
   it('таймаут: груз пропадает без награды', () => {
     const { state, p, rt, runtimes } = setup();
     tryStartDelivery(state, 's1', map, 1000, rt);
-    tickDelivery(state, map, 1000 + DELIVERY_TIME_MS + 1, runtimes);
+    expect(tickDelivery(state, map, 1000 + DELIVERY_TIME_MS + 1, runtimes)).toEqual([]); // просрочка — без события
     expect(p.cargo).toBe(false);
     expect(p.cash).toBe(0);
   });

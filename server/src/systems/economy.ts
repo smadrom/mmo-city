@@ -54,7 +54,10 @@ export function tryDropJob(state: GameState, playerId: string, rt: Runtime, now:
   return true;
 }
 
-export function tickDelivery(state: GameState, map: CityMap, now: number, runtimes: Map<string, Runtime>): void {
+export interface DeliveredEvent { playerId: string; reward: number }
+
+export function tickDelivery(state: GameState, map: CityMap, now: number, runtimes: Map<string, Runtime>): DeliveredEvent[] {
+  const events: DeliveredEvent[] = [];
   state.players.forEach((p, id) => {
     if (!p.cargo) return;
     if (now > p.deliveryDeadline) {
@@ -71,8 +74,10 @@ export function tickDelivery(state: GameState, map: CityMap, now: number, runtim
       p.cargo = false;
       p.deliveryTarget = '';
       p.cash += reward;
+      events.push({ playerId: id, reward }); // событие только при успешной сдаче
     }
   });
+  return events;
 }
 
 export type TransferError = 'bad_amount' | 'self' | 'no_such_user' | 'no_money' | 'need_playtime' | 'ip_limit';

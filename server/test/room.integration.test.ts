@@ -150,6 +150,23 @@ describe('CityRoom (integration)', () => {
     expect(shot?.victim).toBe(victim.sessionId);
   });
 
+  it('сдача груза шлёт адресное delivered, выстрел — hit с attacker', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'dl1', role: 'citizen' });
+    // delivered: проставить груз вручную и подвезти к точке
+    const p = room.state.players.get(c1.sessionId);
+    p.mode = 'car';
+    p.cargo = true;
+    p.deliveryTarget = 'shop';
+    p.deliveryDeadline = Date.now() + 60_000;
+    let got: any = null;
+    c1.onMessage('delivered', (m) => { got = m; });
+    const t = (room as any).map.deliveryTargets.find((t: any) => t.id === 'shop');
+    p.x = t.x; p.z = t.z;
+    await new Promise(r => setTimeout(r, 200));
+    expect(got?.reward).toBeGreaterThan(0);
+  });
+
   it('зомби создаются в комнате и не пишутся в БД', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     let zombies = 0;

@@ -87,7 +87,7 @@ export function tickVehicles(
           const damage = Math.round(sp * RUNOVER_DAMAGE_K);
           v.hp -= damage;
           vrt.lastDamageAt = now;
-          hits.push({ victim: vid, damage, x: v.x, z: v.z });
+          hits.push({ victim: vid, damage, x: v.x, z: v.z, attacker: car.driverId });
           if (v.hp <= 0) killPlayer(state, runtimes, car.driverId, vid, now, events);
         });
       }

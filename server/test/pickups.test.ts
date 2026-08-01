@@ -81,6 +81,17 @@ describe('пикапы', () => {
     expect(state.pickups.has('wpn-test')).toBe(false);
   });
 
+  it('tickPickups возвращает события подбора (игрок, kind, amount)', () => {
+    const state = new GameState();
+    const p = new Player();
+    p.name = 'looter';
+    p.mode = 'foot';
+    state.players.set('s1', p);
+    spawnCashDrop(state, p.x, p.z, 77, 'cash-t1');
+    const events = tickPickups(state, new Map(), 1000);
+    expect(events).toEqual([{ playerId: 's1', kind: 'cash', amount: 77 }]);
+  });
+
   it('респаун регулярного пикапа через PICKUP_RESPAWN_MS со сменой вида (из 4)', () => {
     const { state, p, runtimes } = setup();
     const pk = state.pickups.get('pk0')!;

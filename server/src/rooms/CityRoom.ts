@@ -390,7 +390,7 @@ export class CityRoom extends Room<GameState> {
   private broadcastAttack(res: AttackResult): void {
     if (res.shot) this.broadcast('shot', { ...res.shot, attacker: res.attacker }); // attacker — клиентской отдаче/вспышке
     if (res.swing) this.broadcast('swing', { player: res.attacker });
-    for (const h of res.hits) this.broadcast('hit', h);
+    for (const h of res.hits) this.broadcast('hit', { ...h, attacker: res.attacker }); // attacker — клиентскому hitDealt/hitTaken
   }
 
   // kill feed: убийства (и bounty) — общий broadcast ников
@@ -444,11 +444,15 @@ export class CityRoom extends Room<GameState> {
     const zombieAttacks = tickZombies(this.state, this.runtimes, this.map, this.colliders, now, killEvents);
     for (const res of zombieAttacks) this.broadcastAttack(res);
     this.broadcastKillEvents(killEvents);
-    tickPickups(this.state, this.pickupRuntime, now);
+    for (const ev of tickPickups(this.state, this.pickupRuntime, now)) {
+      this.clients.find(c => c.sessionId === ev.playerId)?.send('picked', { kind: ev.kind, amount: ev.amount });
+    }
     tickRespawn(this.state, this.runtimes, this.map, now);
     const arrests = tickPolice(this.state, this.runtimes, now, dt, this.map);
     for (const a of arrests) this.broadcast('feed', { kind: 'arrest', a: a.cop, b: a.crim });
-    tickDelivery(this.state, this.map, now, this.runtimes);
+    for (const ev of tickDelivery(this.state, this.map, now, this.runtimes)) {
+      this.clients.find(c => c.sessionId === ev.playerId)?.send('delivered', { reward: ev.reward });
+    }
     tickRent(this.state, this.runtimes, now);
     if (now - this.lastPlaytimeAt > 60_000) { // наигрыш для порога переводов (антимультиаккаунт)
       this.runtimes.forEach((rt) => { rt.playtimeSec += 60; });

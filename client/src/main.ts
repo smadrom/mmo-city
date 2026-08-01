@@ -59,6 +59,7 @@ async function start(role: string): Promise<void> {
 
 function bootGame(room: Room): void {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // чёткость на Retina; кап 2 — перф
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 

@@ -27,6 +27,13 @@ export class Fullmap {
       e.preventDefault();
       this.zoom = Math.min(FULLMAP_MAX_ZOOM, Math.max(1, this.zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2)));
     }, { passive: false });
+    // ресайз окна с открытой картой: пересчитать canvas, иначе пропорции едут
+    window.addEventListener('resize', () => {
+      if (!this.isOpen) return;
+      this.canvas.width = window.innerWidth;
+      this.canvas.height = window.innerHeight;
+      this.renderNow();
+    });
     this.canvas.addEventListener('mousedown', (e) => { this.dragging = true; this.lastX = e.clientX; this.lastY = e.clientY; });
     window.addEventListener('mouseup', () => { this.dragging = false; });
     window.addEventListener('mousemove', (e) => {

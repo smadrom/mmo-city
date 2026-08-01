@@ -28,9 +28,10 @@ export class UI {
     this.chatInput.maxLength = CHAT_MAX_LEN; // лимит из общего конфига, не из HTML
     room.onMessage('openSafe', () => {
       document.exitPointerLock(); // иначе клики не доходят до кнопок под захватом мыши
+      this.input.setBlocked(true); // диалог открыт — WASD/стрельбу глушим
       this.safeDialog.classList.remove('hidden');
     });
-    document.getElementById('safeClose')!.addEventListener('click', () => this.safeDialog.classList.add('hidden'));
+    document.getElementById('safeClose')!.addEventListener('click', () => this.closeDialogs());
     document.getElementById('dep100')!.addEventListener('click', () => room.send('deposit', { amount: 100 }));
     document.getElementById('depAll')!.addEventListener('click', () => {
       const me = this.me();
@@ -47,6 +48,7 @@ export class UI {
 
     room.onMessage('openShop', () => {
       document.exitPointerLock();
+      this.input.setBlocked(true); // диалог открыт — WASD/стрельбу глушим
       this.shopDialog.classList.remove('hidden');
     });
     room.onMessage('shopResult', (msg: any) => {
@@ -71,7 +73,7 @@ export class UI {
     }
     document.getElementById('buyAmmoBtn')!.textContent = `Патроны +${AMMO_PACK_SIZE} (${AMMO_PACK_PRICE}$)`;
     document.getElementById('buyAmmoBtn')!.addEventListener('click', () => room.send('buyAmmo'));
-    document.getElementById('shopClose')!.addEventListener('click', () => this.shopDialog.classList.add('hidden'));
+    document.getElementById('shopClose')!.addEventListener('click', () => this.closeDialogs());
     this.shopDialog.addEventListener('click', (e) => (e.target as HTMLElement).blur());
 
     room.onMessage('chat', (msg: any) => this.appendChat(msg));
@@ -100,6 +102,18 @@ export class UI {
         this.closeChat();
       }
     });
+    // Esc закрывает диалоги сейфа/магазина (и снимает блок ввода)
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape') this.closeDialogs();
+    });
+  }
+
+  // единая точка закрытия диалогов: прячет оба и возвращает управление
+  private closeDialogs(): void {
+    const wasOpen = !this.safeDialog.classList.contains('hidden') || !this.shopDialog.classList.contains('hidden');
+    this.safeDialog.classList.add('hidden');
+    this.shopDialog.classList.add('hidden');
+    if (wasOpen) this.input.setBlocked(false); // диалог закрыт — управление вернуть
   }
 
   private appendChat(msg: { from: string; text: string; t?: number }): void {
@@ -178,11 +192,11 @@ export class UI {
 
     // авто-закрытие диалогов: отошёл от двери/магазина, сел в машину или умер
     if (!this.safeDialog.classList.contains('hidden') && !this.nearOwnDoor(me)) {
-      this.safeDialog.classList.add('hidden');
+      this.closeDialogs();
     }
     if (!this.shopDialog.classList.contains('hidden') &&
         !(me.mode === 'foot' && dist2(me.x, me.z, this.map.gunShop.x, this.map.gunShop.z) < DOOR_DIST * DOOR_DIST)) {
-      this.shopDialog.classList.add('hidden');
+      this.closeDialogs();
     }
 
     this.prompt.textContent = this.computePrompt(me);

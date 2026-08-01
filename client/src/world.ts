@@ -26,6 +26,27 @@ function makeTextSprite(text: string): THREE.Sprite {
   return sprite;
 }
 
+let windowsTex: THREE.CanvasTexture | null = null;
+
+// окна жилых домов: белый фон (не трогает цвет материала) + тёмная сетка, часть «горит»
+function getWindowsTexture(): THREE.CanvasTexture {
+  if (windowsTex) return windowsTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 128, 256);
+  for (let row = 0; row < 10; row++) {
+    for (let col = 0; col < 6; col++) {
+      ctx.fillStyle = Math.random() < 0.15 ? '#ffd866' : '#33405c'; // ~15% окон светятся
+      ctx.fillRect(8 + col * 20, 10 + row * 24, 12, 16);
+    }
+  }
+  windowsTex = new THREE.CanvasTexture(canvas);
+  return windowsTex;
+}
+
 export function buildWorld(scene: THREE.Scene): CityMap {
   const map = createCityMap();
 
@@ -96,12 +117,20 @@ export function buildWorld(scene: THREE.Scene): CityMap {
   }
 
   for (const b of map.buildings) {
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(b.w, b.h, b.d),
-      new THREE.MeshLambertMaterial({ color: b.color }),
-    );
-    mesh.position.set(b.x, b.h / 2, b.z);
+    // жилым — окна на боковых гранях (индексы 0,1,4,5), крыша/низ однотонные; спецздания — как раньше
+    const mat = b.kind === 'house'
+      ? [
+          new THREE.MeshLambertMaterial({ color: b.color, map: getWindowsTexture() }),
+          new THREE.MeshLambertMaterial({ color: b.color, map: getWindowsTexture() }),
+          new THREE.MeshLambertMaterial({ color: b.color }),
+          new THREE.MeshLambertMaterial({ color: b.color }),
+          new THREE.MeshLambertMaterial({ color: b.color, map: getWindowsTexture() }),
+          new THREE.MeshLambertMaterial({ color: b.color, map: getWindowsTexture() }),
+        ]
+      : new THREE.MeshLambertMaterial({ color: b.color });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), mat);
     mesh.castShadow = true;
+    mesh.position.set(b.x, b.h / 2, b.z);
     scene.add(mesh);
     const label = makeTextSprite(kindLabel(b.kind));
     label.position.set(b.x, b.h + 3, b.z);

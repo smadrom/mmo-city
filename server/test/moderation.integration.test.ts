@@ -33,7 +33,8 @@ describe('модерация: мут/автомут/цензура (integration)
     c1.send('chat', { text: 'меня слышно?' });
     await wait(200);
     expect(got).toHaveLength(0);
-    expect(notice?.text).toContain('замьючены');
+    expect(notice).toMatchObject({ code: 'muted' });
+    expect(notice.until).toBeGreaterThan(Date.now());
   });
 
   it('мут блокирует SMS: smsResult error=muted', async () => {

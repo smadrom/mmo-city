@@ -112,7 +112,7 @@ export class CityRoom extends Room<GameState> {
       const now = Date.now();
       const mute = this.db.getActiveMute(p.name, now);
       if (mute) {
-        client.send('notice', { text: `Вы замьючены до ${new Date(mute.until).toLocaleTimeString('ru-RU')}` });
+        client.send('notice', { code: 'muted', until: mute.until }); // текст собирает клиент (i18n)
         return;
       }
       // засчитываем нарушение кулдауна до вызова tryChat (он молча гасит спам)

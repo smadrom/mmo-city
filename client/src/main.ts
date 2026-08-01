@@ -82,11 +82,11 @@ function bootGame(room: Room): void {
   const mapRenderer = new CityMapRenderer(map);
   const fullmap = new Fullmap(mapRenderer, input);
   const phone = new Phone(room, map, input, (text) => ui.showToast(text), () => avatars.serverNow());
-  room.onMessage('notice', (m: { code?: string; until?: number; text?: string }) => {
+  room.onMessage('notice', (m: { code?: string; until?: number }) => {
     if (m?.code === 'muted' && m.until) {
       const locale = getLang() === 'ru' ? 'ru-RU' : 'en-US';
       ui.showToast(t('notice.muted', { time: new Date(m.until).toLocaleTimeString(locale) }));
-    } else if (m?.text) ui.showToast(String(m.text)); // переходный формат до Task 15
+    } // старый text-формат не принимаем — старые клиенты отвергнуты PROTOCOL_VERSION
   });
   const feed = new Feed();
   feed.bind(room);

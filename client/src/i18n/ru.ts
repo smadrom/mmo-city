@@ -11,6 +11,7 @@ export const ru: Record<string, string> = {
   'role.citizen': 'Гражданин',
   'role.cop': 'Полицейский',
   'role.zombie': 'Зомби',
+  'tab.title': 'Игроки онлайн',
   'player.unknown': 'игрок',
   'stats.cash': 'Наличные',
   'stats.safe': 'Сейф',

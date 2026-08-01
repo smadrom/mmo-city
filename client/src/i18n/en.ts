@@ -13,6 +13,7 @@ export const en: Record<keyof typeof ru, string> = {
   'role.citizen': 'Citizen',
   'role.cop': 'Police officer',
   'role.zombie': 'Zombie',
+  'tab.title': 'Players online',
   'player.unknown': 'player',
   'stats.cash': 'Cash',
   'stats.safe': 'Safe',

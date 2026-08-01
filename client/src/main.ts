@@ -13,6 +13,7 @@ import { Fullmap } from './fullmap.js';
 import { Phone } from './phone.js';
 import { Settings } from './settings.js';
 import { Feed } from './feed.js';
+import { TabList } from './tablist.js';
 import { TouchControls } from './touch.js';
 import { t, setLang, getLang, applyStatic } from './i18n/index.js';
 import type { Room } from 'colyseus.js';
@@ -99,6 +100,7 @@ function bootGame(room: Room): void {
   const phone = new Phone(room, map, input, (text) => ui.showToast(text), () => avatars.serverNow());
   const settings = new Settings(effects, renderer, scene, input, (s) => ui.showToast(s));
   const feed = new Feed();
+  const tablist = new TabList();
   const minimapCanvas = document.getElementById('minimap') as HTMLCanvasElement;
   const prediction = new Prediction();
   const overlay = document.getElementById('reconnectOverlay')!;
@@ -146,6 +148,7 @@ function bootGame(room: Room): void {
   phone.onOpen = () => fullmap.close();
   fullmap.onOpen = () => phone.close();
   feed.bind(current);
+  tablist.bind(current);
 
   // effects создан раньше — его keydown переключает mute первым, здесь читаем уже новое значение
   window.addEventListener('keydown', (e) => {
@@ -200,6 +203,7 @@ function bootGame(room: Room): void {
         ui.bind(fresh);
         phone.bind(fresh);
         feed.bind(fresh);
+        tablist.bind(fresh);
         input.setRoom(fresh);
         prediction.reset();
         bindRoomMessages(fresh);
@@ -236,6 +240,7 @@ function bootGame(room: Room): void {
     fx.update(performance.now());
     pickups.update();
     ui.update();
+    tablist.update();
     if (me) {
       if (me.mode === 'car') lastCarId = me.carId;
       const markers: MapMarker[] = [];

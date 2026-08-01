@@ -163,7 +163,8 @@ describe('CityRoom (integration)', () => {
     c1.onMessage('delivered', (m) => { got = m; });
     const t = (room as any).map.deliveryTargets.find((t: any) => t.id === 'shop');
     p.x = t.x; p.z = t.z;
-    await new Promise(r => setTimeout(r, 200));
+    // запас по таймингу: тик 20 Гц, ждём 400 мс вместо 200
+    await new Promise(r => setTimeout(r, 400));
     expect(got?.reward).toBeGreaterThan(0);
   });
 
@@ -195,6 +196,7 @@ describe('CityRoom (integration)', () => {
     await new Promise(r => setTimeout(r, 200));
     expect(hit?.victim).toBe(c2.sessionId);
     expect(hit?.damage).toBe(PUNCH_DAMAGE);
+    expect(hit?.attacker).toBe(c1.sessionId);
     expect(swing?.player).toBe(c1.sessionId);
   });
 

@@ -16,6 +16,9 @@ export class InputController {
   private touch = { x: 0, y: 0 }; // джойстик -1..1 (тач)
   private touchSprint = false;    // кнопка «Бег» — тоггл (тач)
 
+  // открыт ли чужой оверлей (настройки/телефон/карта) — хоткеи P/M поверх него не открываются
+  isBlocked(): boolean { return this.blocked; }
+
   setBlocked(v: boolean): void {
     this.blocked = v;
     if (v) {

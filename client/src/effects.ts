@@ -23,7 +23,7 @@ export class Effects {
   private dmgDirTimer = 0;
   private audio: AudioContext | null = null;
   muted = localStorage.getItem('mute') === '1'; // публичное: main.ts читает для тоста
-  volume = Number(localStorage.getItem('vol') ?? '1') || 1; // 0..1, слайдер настроек
+  volume = (() => { const v = Number(localStorage.getItem('vol') ?? '1'); return Number.isFinite(v) ? v : 1; })(); // '0' — валидная громкость, не схлопываем в 1
   private prevMode = '';
 
   private room!: Room; // не readonly: реконнект переприсваивает через bind

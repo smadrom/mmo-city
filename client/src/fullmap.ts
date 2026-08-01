@@ -20,7 +20,11 @@ export class Fullmap {
     this.canvas = document.getElementById('fullmap') as HTMLCanvasElement;
     window.addEventListener('keydown', (e) => {
       if (e.repeat || isTypingTarget()) return;
-      if (e.code === 'KeyM') this.isOpen ? this.close() : this.open();
+      // не открываемся поверх чужого оверлея (настройки/телефон); закрытие своего — как раньше
+      if (e.code === 'KeyM') {
+        if (!this.isOpen && this.input.isBlocked()) return;
+        this.isOpen ? this.close() : this.open();
+      }
       // Esc — центральный диспетчер в main.ts
     });
     this.canvas.addEventListener('wheel', (e) => {

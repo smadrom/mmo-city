@@ -19,9 +19,11 @@ export class Settings {
     const vol = document.getElementById('setVolume') as HTMLInputElement;
     vol.value = String(Math.round(effects.volume * 100));
     vol.addEventListener('input', () => effects.setVolume(Number(vol.value) / 100));
+    vol.addEventListener('change', () => vol.blur()); // иначе фокус глушит Esc (isTypingTarget ловит INPUT)
     const mute = document.getElementById('setMute') as HTMLInputElement;
     mute.checked = effects.muted;
     mute.addEventListener('change', () => { if (effects.muted !== mute.checked) effects.toggleMute(); });
+    mute.addEventListener('change', () => mute.blur());
     document.getElementById('setRu')!.addEventListener('click', () => this.setLanguage('ru'));
     document.getElementById('setEn')!.addEventListener('click', () => this.setLanguage('en'));
     const quality = document.getElementById('setQuality') as HTMLSelectElement;

@@ -31,7 +31,11 @@ export class Phone {
   ) {
     window.addEventListener('keydown', (e) => {
       if (e.repeat || isTypingTarget()) return;
-      if (e.code === 'KeyP') this.isOpen ? this.close() : this.open();
+      // не открываемся поверх чужого оверлея (настройки/карта); закрытие своего — как раньше
+      if (e.code === 'KeyP') {
+        if (!this.isOpen && this.input.isBlocked()) return;
+        this.isOpen ? this.close() : this.open();
+      }
       // Esc — центральный диспетчер в main.ts
     });
     this.root.querySelectorAll('.phoneApp').forEach(b =>

@@ -11,6 +11,7 @@ import { Pickups } from './pickups.js';
 import { CityMapRenderer, type MapMarker } from './minimap.js';
 import { Fullmap } from './fullmap.js';
 import { Phone } from './phone.js';
+import { Settings } from './settings.js';
 import { Feed } from './feed.js';
 import { TouchControls } from './touch.js';
 import { t, setLang, getLang, applyStatic } from './i18n/index.js';
@@ -96,6 +97,7 @@ function bootGame(room: Room): void {
   const mapRenderer = new CityMapRenderer(map);
   const fullmap = new Fullmap(mapRenderer, input);
   const phone = new Phone(room, map, input, (text) => ui.showToast(text), () => avatars.serverNow());
+  const settings = new Settings(effects, renderer, scene, input, (s) => ui.showToast(s));
   const feed = new Feed();
   const minimapCanvas = document.getElementById('minimap') as HTMLCanvasElement;
   const prediction = new Prediction();
@@ -110,6 +112,16 @@ function bootGame(room: Room): void {
     if (fullmap.isOpen || phone.isOpen || isTypingTarget()) return;
     camDist = Math.min(CAM_MAX, Math.max(CAM_MIN, camDist + Math.sign(e.deltaY)));
   }, { passive: true });
+
+  // центральный Esc: закрывает оверлеи по очереди, если ничего не открыто — меню настроек
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Escape' || e.repeat || isTypingTarget()) return;
+    if (phone.isOpen) phone.close();
+    else if (fullmap.isOpen) fullmap.close();
+    else if (ui.dialogsOpen()) ui.closeDialogs();
+    else if (settings.isOpen) settings.close();
+    else settings.open();
+  });
 
   // F3 — FPS/пинг (пинг: эхо ping/pong раз в 2 с, только когда панель видна)
   const debugEl = document.getElementById('debug')!;

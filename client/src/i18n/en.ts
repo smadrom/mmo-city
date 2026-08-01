@@ -107,4 +107,12 @@ export const en: Record<keyof typeof ru, string> = {
   'touch.run': 'Run',
   'touch.phone': 'Phone',
   'touch.map': 'Map',
+  'settings.title': 'Settings',
+  'settings.volume': 'Volume',
+  'settings.mute': 'Mute',
+  'settings.lang': 'Language',
+  'settings.quality': 'Quality',
+  'settings.qualityHigh': 'High',
+  'settings.qualityLow': 'Low',
+  'settings.langNote': 'World labels will update after rejoin',
 };

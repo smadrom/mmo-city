@@ -85,10 +85,7 @@ export class UI {
         this.closeChat();
       }
     });
-    // Esc закрывает диалоги сейфа/магазина (и снимает блок ввода)
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Escape') this.closeDialogs();
-    });
+    // Esc обрабатывает центральный диспетчер в main.ts — здесь слушателя нет
 
     this.bind(room);
   }
@@ -121,11 +118,17 @@ export class UI {
   }
 
   // единая точка закрытия диалогов: прячет оба и возвращает управление
-  private closeDialogs(): void {
+  // публичный: дёргает центральный Esc-диспетчер в main.ts
+  closeDialogs(): void {
     const wasOpen = !this.safeDialog.classList.contains('hidden') || !this.shopDialog.classList.contains('hidden');
     this.safeDialog.classList.add('hidden');
     this.shopDialog.classList.add('hidden');
     if (wasOpen) this.input.setBlocked(false); // диалог закрыт — управление вернуть
+  }
+
+  // открыт ли сейф/магазин — для Esc-диспетчера в main.ts
+  dialogsOpen(): boolean {
+    return !this.safeDialog.classList.contains('hidden') || !this.shopDialog.classList.contains('hidden');
   }
 
   private appendChat(msg: { from: string; text: string; t?: number }): void {

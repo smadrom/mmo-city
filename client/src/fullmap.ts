@@ -21,7 +21,7 @@ export class Fullmap {
     window.addEventListener('keydown', (e) => {
       if (e.repeat || isTypingTarget()) return;
       if (e.code === 'KeyM') this.isOpen ? this.close() : this.open();
-      else if (e.code === 'Escape' && this.isOpen) this.close();
+      // Esc — центральный диспетчер в main.ts
     });
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();

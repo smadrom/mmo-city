@@ -23,6 +23,7 @@ export class Effects {
   private dmgDirTimer = 0;
   private audio: AudioContext | null = null;
   muted = localStorage.getItem('mute') === '1'; // публичное: main.ts читает для тоста
+  volume = Number(localStorage.getItem('vol') ?? '1') || 1; // 0..1, слайдер настроек
   private prevMode = '';
 
   private room!: Room; // не readonly: реконнект переприсваивает через bind
@@ -75,6 +76,11 @@ export class Effects {
     return this.muted;
   }
 
+  setVolume(v: number): void {
+    this.volume = Math.max(0, Math.min(1, v));
+    localStorage.setItem('vol', String(this.volume));
+  }
+
   // доставка оплачена: восходящая «монетка» (main.ts дёргает на 'delivered')
   cashIn(): void {
     this.tone(523, 0.25, 'sine', 0.08, 1046);
@@ -91,7 +97,7 @@ export class Effects {
       osc.type = type;
       osc.frequency.setValueAtTime(freq, t0);
       if (slideTo > 0) osc.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
-      gain.gain.setValueAtTime(vol, t0);
+      gain.gain.setValueAtTime(vol * this.volume, t0);
       gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
       osc.connect(gain).connect(this.audio.destination);
       osc.start();

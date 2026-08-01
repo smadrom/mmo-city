@@ -106,6 +106,21 @@
       <div id="deathTimer"></div>
     </div>
     <div id="reconnectOverlay" class="hidden"></div>
+    <div id="settings" class="hidden">
+      <div class="panel">
+        <h2 data-i18n="settings.title"></h2>
+        <label><span data-i18n="settings.volume"></span><input id="setVolume" type="range" min="0" max="100"></label>
+        <label><input id="setMute" type="checkbox"><span data-i18n="settings.mute"></span></label>
+        <div class="row"><span data-i18n="settings.lang"></span><button id="setRu">RU</button><button id="setEn">EN</button></div>
+        <div class="row"><span data-i18n="settings.quality"></span>
+          <select id="setQuality">
+            <option value="high" data-i18n="settings.qualityHigh"></option>
+            <option value="low" data-i18n="settings.qualityLow"></option>
+          </select>
+        </div>
+        <button id="settingsClose" data-i18n="dialog.close"></button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

@@ -105,4 +105,12 @@ export const ru: Record<string, string> = {
   'touch.run': 'Бег',
   'touch.phone': 'Телефон',
   'touch.map': 'Карта',
+  'settings.title': 'Настройки',
+  'settings.volume': 'Громкость',
+  'settings.mute': 'Без звука',
+  'settings.lang': 'Язык',
+  'settings.quality': 'Качество',
+  'settings.qualityHigh': 'Высокое',
+  'settings.qualityLow': 'Низкое',
+  'settings.langNote': 'Подписи в мире обновятся после перезахода',
 };

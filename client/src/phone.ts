@@ -32,7 +32,7 @@ export class Phone {
     window.addEventListener('keydown', (e) => {
       if (e.repeat || isTypingTarget()) return;
       if (e.code === 'KeyP') this.isOpen ? this.close() : this.open();
-      else if (e.code === 'Escape' && this.isOpen) this.close();
+      // Esc — центральный диспетчер в main.ts
     });
     this.root.querySelectorAll('.phoneApp').forEach(b =>
       b.addEventListener('click', () => this.openApp((b as HTMLElement).dataset.app!)));

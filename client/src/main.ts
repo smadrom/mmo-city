@@ -52,7 +52,19 @@ async function start(role: string): Promise<void> {
   }
   joinScreen.style.display = 'none';
   document.getElementById('hud')!.classList.remove('hidden');
-  await waitLiveState(room);
+  try {
+    // сервер может умереть между join и первым патчем — без таймаута был бы вечный чёрный экран
+    await Promise.race([
+      waitLiveState(room),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('state_timeout')), 8000)),
+    ]);
+  } catch {
+    connecting = false;
+    joinError.textContent = t('join.full');
+    joinScreen.style.display = '';
+    document.getElementById('hud')!.classList.add('hidden');
+    return;
+  }
   bootGame(room);
 }
 

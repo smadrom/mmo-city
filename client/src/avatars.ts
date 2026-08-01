@@ -197,8 +197,14 @@ export class Avatars {
 
   // реконнект: меши старой комнаты снести, новая пришлёт состояние заново (onAdd на всех)
   rebind(room: Room): void {
-    this.players.forEach(m => this.scene.remove(m.group));
-    this.cars.forEach(m => this.scene.remove(m.group));
+    this.players.forEach((m) => {
+      this.disposeGroup(m.group);
+      this.scene.remove(m.group);
+    });
+    this.cars.forEach((m) => {
+      this.disposeGroup(m.group);
+      this.scene.remove(m.group);
+    });
     this.players.clear();
     this.cars.clear();
     this.playerSnaps.clear();
@@ -230,6 +236,7 @@ export class Avatars {
     $(room.state).players.onRemove((_p: any, id: string) => {
       const mesh = this.players.get(id);
       if (mesh) {
+        this.disposeGroup(mesh.group);
         this.scene.remove(mesh.group);
         this.players.delete(id);
         this.playerSnaps.delete(id);
@@ -246,9 +253,23 @@ export class Avatars {
     $(room.state).cars.onRemove((_c: any, id: string) => {
       const mesh = this.cars.get(id);
       if (mesh) {
+        this.disposeGroup(mesh.group);
         this.scene.remove(mesh.group);
         this.cars.delete(id);
         this.carSnaps.delete(id);
+      }
+    });
+  }
+
+  // снос GPU-ресурсов группы: геометрии мешей, материалы и канвас-текстуры неймлейблов
+  private disposeGroup(group: THREE.Group): void {
+    group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh) mesh.geometry.dispose();
+      const m = (o as THREE.Mesh).material as THREE.MeshLambertMaterial | undefined;
+      if (m) {
+        (m as unknown as THREE.SpriteMaterial).map?.dispose();
+        m.dispose();
       }
     });
   }

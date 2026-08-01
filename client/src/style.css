@@ -161,3 +161,27 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
   align-items: center; justify-content: center;
   background: rgba(0,0,0,.75); color: #fff; font-size: 22px;
 }
+
+/* адаптив: узкие окна и мобильные */
+@media (max-width: 900px) {
+  #chat, #chatInput { width: 46vw; }
+}
+@media (max-width: 700px) {
+  #hpbar { width: 160px; }
+  #stats { top: 52px; font-size: 12px; }
+  #ammoBig { font-size: 18px; }
+  #banner { top: 50px; font-size: 16px; }
+  #prompt { bottom: 110px; font-size: 15px; }
+  #toast { bottom: 210px; }
+  #minimap { width: 130px; height: 130px; bottom: 12px; right: 12px; }
+  #phoneHint { display: none; } /* на таче своя кнопка телефона */
+  #phone {
+    inset: 0; width: auto; height: auto; right: 0; bottom: 0;
+    border: none; border-radius: 0; padding: 16px; font-size: 16px;
+  }
+  .phoneApp { padding: 18px; font-size: 18px; }
+  #jobBtn { padding: 16px; font-size: 17px; }
+  #chat { bottom: 170px; max-height: 100px; }
+  #chatInput { bottom: 134px; }
+  #deathTitle { font-size: 30px; }
+}

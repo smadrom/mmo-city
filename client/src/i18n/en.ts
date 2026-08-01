@@ -86,6 +86,8 @@ export const en: Record<keyof typeof ru, string> = {
   'transfer.ip_limit': 'Daily transfer limit for your IP reached',
   'transfer.error': 'Transfer error',
   'notice.muted': 'You are muted until {time}',
+  'sys.join': '{name} joined the city',
+  'sys.leave': '{name} left',
   'world.hospital': 'Hospital',
   'world.police': 'Police',
   'world.warehouse': 'Warehouse',

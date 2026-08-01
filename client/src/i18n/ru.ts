@@ -84,6 +84,8 @@ export const ru: Record<string, string> = {
   'transfer.ip_limit': 'Дневной лимит переводов с вашего IP исчерпан',
   'transfer.error': 'Ошибка перевода',
   'notice.muted': 'Вы замьючены до {time}',
+  'sys.join': '{name} вошёл в город',
+  'sys.leave': '{name} вышел',
   'world.hospital': 'Больница',
   'world.police': 'Полиция',
   'world.warehouse': 'Склад',

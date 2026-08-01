@@ -224,3 +224,5 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
   font-family: monospace; background: rgba(0,0,0,.5); padding: 4px 8px;
   border-radius: 4px; pointer-events: none;
 }
+
+#chat div.sysMsg { color: #aaa; font-style: italic; }

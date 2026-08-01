@@ -111,6 +111,9 @@ export class UI {
       this.showToast(msg.ok ? t('shop.ok') : (t(key) === key ? t('shop.error') : t(key))); // неизвестный reason — общий fallback
     });
     room.onMessage('chat', (msg: any) => this.appendChat(msg));
+    room.onMessage('sys', (m: { code: string; name: string; t?: number }) => {
+      this.appendChat({ from: '*', text: t(`sys.${m.code}`, { name: m.name }), t: m.t });
+    });
     room.onMessage('chatHistory', (h: any) => {
       for (const msg of h.items) this.appendChat(msg);
     });
@@ -135,6 +138,13 @@ export class UI {
     if (this.seenChatQueue.length > 500) this.seenChat.delete(this.seenChatQueue.shift()!);
     const atBottom = this.chat.scrollTop + this.chat.clientHeight >= this.chat.scrollHeight - 10;
     const div = document.createElement('div');
+    if (msg.from === '*') {
+      div.textContent = msg.text; // системное: без «от кого», курсивом
+      div.className = 'sysMsg';
+      this.chat.append(div);
+      if (atBottom) this.chat.scrollTop = this.chat.scrollHeight;
+      return;
+    }
     div.textContent = `${msg.from}: ${msg.text}`; // textContent — без XSS
     this.chat.append(div);
     if (atBottom) this.chat.scrollTop = this.chat.scrollHeight;

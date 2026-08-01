@@ -234,7 +234,7 @@ export class CityRoom extends Room<GameState> {
   onJoin(client: Client, options: { name?: string; role?: string }): void {
     const name = (client.auth as { name: string }).name;
     const ghostId = this.findSessionByName(name); // вытесняем «призрака» реконнекта того же ника
-    if (ghostId) this.removePlayer(ghostId);
+    if (ghostId) this.removePlayer(ghostId, true); // вытеснение своего призрака — не «вышел»
     let role: 'citizen' | 'cop' = options?.role === 'cop' ? 'cop' : 'citizen';
     if (role === 'cop') {
       let cops = 0;
@@ -277,6 +277,7 @@ export class CityRoom extends Room<GameState> {
     this.runtimes.set(client.sessionId, rt);
     client.send('authToken', { token: rec.secret ?? '' });
     client.send('smsInbox', { unread: this.db.unreadCount(name) });
+    this.broadcast('sys', { code: 'join', name, t: this.state.serverTime }); // системное: вошёл в город
   }
 
   async onLeave(client: Client, consented: boolean): Promise<void> {
@@ -298,7 +299,7 @@ export class CityRoom extends Room<GameState> {
     clearRoom();
   }
 
-  private removePlayer(id: string): void {
+  private removePlayer(id: string, silent = false): void {
     const p = this.state.players.get(id);
     if (p) {
       if (p.mode === 'car') {
@@ -310,6 +311,9 @@ export class CityRoom extends Room<GameState> {
       }
       this.savePlayer(id);
       this.state.players.delete(id);
+      if (!silent && p.role !== 'zombie') {
+        this.broadcast('sys', { code: 'leave', name: p.name, t: this.state.serverTime }); // системное: вышел
+      }
     }
     this.runtimes.delete(id);
   }

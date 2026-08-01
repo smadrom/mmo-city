@@ -382,6 +382,19 @@ describe('CityRoom (integration)', () => {
     expect(got).toEqual({ t: 12345 });
   });
 
+  it('sys: вход/выход игрока рассылается всем', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'watcher', role: 'citizen' });
+    const msgs: any[] = [];
+    c1.onMessage('sys', (m) => msgs.push(m));
+    const c2 = await testServer.connectTo(room, { name: 'joiner', role: 'citizen' });
+    await new Promise(r => setTimeout(r, 200));
+    expect(msgs.some(m => m.code === 'join' && m.name === 'joiner')).toBe(true);
+    await c2.leave(); // consented → onLeave кидает в catch → removePlayer сразу, окно реконнекта не ждём
+    await new Promise(r => setTimeout(r, 300));
+    expect(msgs.some(m => m.code === 'leave' && m.name === 'joiner')).toBe(true);
+  });
+
   it('kickByName дисконнектит игрока (admin)', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     const c = await testServer.connectTo(room, { name: 'kickme', role: 'citizen' });

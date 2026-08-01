@@ -24,7 +24,7 @@ export class InputController {
       if (isTypingTarget() || this.blocked) return;
       if (e.repeat) return; // автоповтор зажатой клавиши (зажатый E не шлёт interact подряд)
       this.keys.add(e.code);
-      if (e.code === 'KeyE') room.send('interact');
+      if (e.code === 'KeyE') this.room.send('interact');
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     // потеря фокуса окна/вкладки — keyup не приходит, клавиши «залипают» → сброс
@@ -36,7 +36,7 @@ export class InputController {
     dom.addEventListener('click', () => {
       if (this.blocked) return; // оверлей закрывается только своей клавишей — клик по canvas под ним игнорируем
       if (document.pointerLockElement !== dom) dom.requestPointerLock();
-      else room.send('attack');
+      else this.room.send('attack');
     });
     window.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement === dom) this.yaw -= e.movementX * 0.003;
@@ -48,8 +48,13 @@ export class InputController {
     setInterval(() => {
       if (isTypingTarget() || this.blocked) this.keys.clear(); // стоим, пока печатаем / открыт оверлей
       this.refresh();
-      room.send('input', this.current);
+      this.room.send('input', this.current);
     }, 50);
+  }
+
+  // реконнект: новая комната — шлем input в неё (слушатели DOM не привязаны к room)
+  setRoom(room: Room): void {
+    this.room = room;
   }
 
   refresh(): void {

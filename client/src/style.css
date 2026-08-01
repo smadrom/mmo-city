@@ -155,3 +155,9 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
   color: #fff; font-size: 13px; background: rgba(0,0,0,.5);
   border-radius: 4px; padding: 3px 8px;
 }
+
+#reconnectOverlay {
+  position: fixed; inset: 0; z-index: 9; display: flex;
+  align-items: center; justify-content: center;
+  background: rgba(0,0,0,.75); color: #fff; font-size: 22px;
+}

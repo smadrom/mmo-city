@@ -52,18 +52,24 @@ export class Phone {
       if (e.code === 'Enter') this.sendSms();
     });
     // Банк
+    // this.room, а не параметр: после реконнекта кнопки шлют в новую комнату
     document.getElementById('transferBtn')!.addEventListener('click', () => {
       const to = (document.getElementById('transferTo') as HTMLInputElement).value.trim();
       const amount = Number((document.getElementById('transferAmount') as HTMLInputElement).value);
-      room.send('transfer', { to, amount });
+      this.room.send('transfer', { to, amount });
     });
     // Работа
     document.getElementById('jobBtn')!.addEventListener('click', () => {
       const me = this.me();
-      room.send(me?.cargo ? 'jobDrop' : 'jobTake');
+      this.room.send(me?.cargo ? 'jobDrop' : 'jobTake');
     });
 
-    // Сеть
+    this.bind(room);
+  }
+
+  // реконнект: сообщения подписываем на новую комнату (DOM-слушатели остаются в конструкторе)
+  bind(room: Room): void {
+    this.room = room;
     room.onMessage('smsInbox', (m: any) => { this.unread = m.unread; this.renderBadge(); });
     room.onMessage('sms', (m: any) => this.onSms(m));
     room.onMessage('smsResult', (m: any) => {
@@ -83,7 +89,7 @@ export class Phone {
       if (m.ok) {
         (document.getElementById('transferTo') as HTMLInputElement).value = '';
         (document.getElementById('transferAmount') as HTMLInputElement).value = '';
-        room.send('transferHistoryReq');
+        this.room.send('transferHistoryReq');
       }
     });
     room.onMessage('transferIn', (m: any) => this.toast(t('toast.transferIn', { from: m.from, amount: m.amount })));

@@ -14,6 +14,11 @@ export class Prediction {
     this.colliders = createCityMap().buildings.map(b => ({ x: b.x, z: b.z, w: b.w, d: b.d }));
   }
 
+  // реконнект: сброс — следующий update жёстко примет серверную позицию
+  reset(): void {
+    this.active = false;
+  }
+
   /** Вызывать каждый кадр. Возвращает true, если предсказание активно (mode === 'foot'). */
   update(dt: number, input: MoveInput, mode: string, serverX: number, serverZ: number): boolean {
     if (mode !== 'foot') {

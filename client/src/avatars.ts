@@ -182,15 +182,32 @@ function makeCarMesh(): CarMesh {
 export class Avatars {
   // смещение serverTime − Date.now(); рекалибруется EMA на каждом патче,
   // чтобы не уплывать при дрейфе часов в долгой сессии
-  private serverOffset: number;
+  private serverOffset!: number; // присваивается в attach (в т.ч. при реконнекте)
   // предсказанная позиция себя (пешком); null — едем по серверному state
   selfPos: { x: number; z: number } | null = null;
   private players = new Map<string, PlayerMesh>();
   private cars = new Map<string, CarMesh>();
   private playerSnaps = new Map<string, Snap[]>();
   private carSnaps = new Map<string, Snap[]>();
+  private room!: Room; // не readonly: реконнект переприсваивает через attach
 
-  constructor(private scene: THREE.Scene, private room: Room) {
+  constructor(private scene: THREE.Scene, room: Room) {
+    this.attach(room);
+  }
+
+  // реконнект: меши старой комнаты снести, новая пришлёт состояние заново (onAdd на всех)
+  rebind(room: Room): void {
+    this.players.forEach(m => this.scene.remove(m.group));
+    this.cars.forEach(m => this.scene.remove(m.group));
+    this.players.clear();
+    this.cars.clear();
+    this.playerSnaps.clear();
+    this.carSnaps.clear();
+    this.attach(room);
+  }
+
+  private attach(room: Room): void {
+    this.room = room;
     this.serverOffset = (room.state as any).serverTime - Date.now();
     room.onStateChange(() => {
       const st = (room.state as any).serverTime as number;
@@ -208,12 +225,12 @@ export class Avatars {
       mesh.group.rotation.y = p.rotY;
       this.players.set(id, mesh);
       this.playerSnaps.set(id, []);
-      scene.add(mesh.group);
+      this.scene.add(mesh.group);
     });
     $(room.state).players.onRemove((_p: any, id: string) => {
       const mesh = this.players.get(id);
       if (mesh) {
-        scene.remove(mesh.group);
+        this.scene.remove(mesh.group);
         this.players.delete(id);
         this.playerSnaps.delete(id);
       }
@@ -224,12 +241,12 @@ export class Avatars {
       mesh.group.rotation.y = c.rotY;
       this.cars.set(id, mesh);
       this.carSnaps.set(id, []);
-      scene.add(mesh.group);
+      this.scene.add(mesh.group);
     });
     $(room.state).cars.onRemove((_c: any, id: string) => {
       const mesh = this.cars.get(id);
       if (mesh) {
-        scene.remove(mesh.group);
+        this.scene.remove(mesh.group);
         this.cars.delete(id);
         this.carSnaps.delete(id);
       }

@@ -31,35 +31,22 @@ export class UI {
 
   constructor(private room: Room, private map: CityMap, private avatars: Avatars, private input: InputController) {
     this.chatInput.maxLength = CHAT_MAX_LEN; // лимит из общего конфига, не из HTML
-    room.onMessage('openSafe', () => {
-      document.exitPointerLock(); // иначе клики не доходят до кнопок под захватом мыши
-      this.input.setBlocked(true); // диалог открыт — WASD/стрельбу глушим
-      this.safeDialog.classList.remove('hidden');
-    });
     document.getElementById('safeClose')!.addEventListener('click', () => this.closeDialogs());
-    document.getElementById('dep100')!.addEventListener('click', () => room.send('deposit', { amount: 100 }));
+    // this.room, а не параметр: после реконнекта кнопки шлют в новую комнату
+    document.getElementById('dep100')!.addEventListener('click', () => this.room.send('deposit', { amount: 100 }));
     document.getElementById('depAll')!.addEventListener('click', () => {
       const me = this.me();
-      if (me) room.send('deposit', { amount: me.cash });
+      if (me) this.room.send('deposit', { amount: me.cash });
     });
-    document.getElementById('wd100')!.addEventListener('click', () => room.send('withdraw', { amount: 100 }));
+    document.getElementById('wd100')!.addEventListener('click', () => this.room.send('withdraw', { amount: 100 }));
     document.getElementById('wdAll')!.addEventListener('click', () => {
       const me = this.me();
-      if (me) room.send('withdraw', { amount: me.safe });
+      if (me) this.room.send('withdraw', { amount: me.safe });
     });
     // кнопка сохраняет фокус после клика — снимаем его, чтобы Space/Enter
     // не повторяли последнее действие (в диалоге нет текстовых полей)
     this.safeDialog.addEventListener('click', (e) => (e.target as HTMLElement).blur());
 
-    room.onMessage('openShop', () => {
-      document.exitPointerLock();
-      this.input.setBlocked(true); // диалог открыт — WASD/стрельбу глушим
-      this.shopDialog.classList.remove('hidden');
-    });
-    room.onMessage('shopResult', (msg: any) => {
-      const key = `shop.${msg.reason}`;
-      this.showToast(msg.ok ? t('shop.ok') : (t(key) === key ? t('shop.error') : t(key))); // неизвестный reason — общий fallback
-    });
     const items = document.getElementById('shopItems')!;
     for (const kind of Object.keys(WEAPONS) as WeaponKind[]) {
       const w = WEAPONS[kind];
@@ -69,20 +56,14 @@ export class UI {
       label.textContent = t('shop.row', { name: t(`weapon.${kind}`), dmg: w.damage, range: w.range });
       const btn = document.createElement('button');
       btn.textContent = `${w.price}$`;
-      btn.addEventListener('click', () => room.send('buyWeapon', { kind }));
+      btn.addEventListener('click', () => this.room.send('buyWeapon', { kind }));
       row.append(label, btn);
       items.append(row);
     }
     document.getElementById('buyAmmoBtn')!.textContent = t('dialog.ammo', { size: AMMO_PACK_SIZE, price: AMMO_PACK_PRICE });
-    document.getElementById('buyAmmoBtn')!.addEventListener('click', () => room.send('buyAmmo'));
+    document.getElementById('buyAmmoBtn')!.addEventListener('click', () => this.room.send('buyAmmo'));
     document.getElementById('shopClose')!.addEventListener('click', () => this.closeDialogs());
     this.shopDialog.addEventListener('click', (e) => (e.target as HTMLElement).blur());
-
-    room.onMessage('chat', (msg: any) => this.appendChat(msg));
-    room.onMessage('chatHistory', (h: any) => {
-      for (const msg of h.items) this.appendChat(msg);
-    });
-    room.send('chatHistoryReq');
 
     // Enter вне поля — открыть ввод (pointer lock снимаем, иначе фокус не уйти)
     window.addEventListener('keydown', (e) => {
@@ -98,7 +79,7 @@ export class UI {
       e.stopPropagation(); // клавиши не доходят до InputController
       if (e.code === 'Enter') {
         const text = this.chatInput.value.trim();
-        if (text) room.send('chat', { text });
+        if (text) this.room.send('chat', { text });
         this.closeChat();
       } else if (e.code === 'Escape') {
         this.closeChat();
@@ -108,6 +89,32 @@ export class UI {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape') this.closeDialogs();
     });
+
+    this.bind(room);
+  }
+
+  // реконнект: сообщения подписываем на новую комнату (DOM-слушатели остаются в конструкторе)
+  bind(room: Room): void {
+    this.room = room;
+    room.onMessage('openSafe', () => {
+      document.exitPointerLock(); // иначе клики не доходят до кнопок под захватом мыши
+      this.input.setBlocked(true); // диалог открыт — WASD/стрельбу глушим
+      this.safeDialog.classList.remove('hidden');
+    });
+    room.onMessage('openShop', () => {
+      document.exitPointerLock();
+      this.input.setBlocked(true); // диалог открыт — WASD/стрельбу глушим
+      this.shopDialog.classList.remove('hidden');
+    });
+    room.onMessage('shopResult', (msg: any) => {
+      const key = `shop.${msg.reason}`;
+      this.showToast(msg.ok ? t('shop.ok') : (t(key) === key ? t('shop.error') : t(key))); // неизвестный reason — общий fallback
+    });
+    room.onMessage('chat', (msg: any) => this.appendChat(msg));
+    room.onMessage('chatHistory', (h: any) => {
+      for (const msg of h.items) this.appendChat(msg);
+    });
+    room.send('chatHistoryReq'); // история перезапрашивается и после реконнекта — дедуп в appendChat
   }
 
   // единая точка закрытия диалогов: прячет оба и возвращает управление

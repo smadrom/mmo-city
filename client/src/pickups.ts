@@ -53,8 +53,24 @@ interface PickupEntry { group: THREE.Group; kind: string; phase: number }
 
 export class Pickups {
   private items = new Map<string, PickupEntry>();
+  private room!: Room; // не readonly: реконнект переприсваивает через attach
 
-  constructor(private scene: THREE.Scene, private room: Room) {
+  constructor(private scene: THREE.Scene, room: Room) {
+    this.attach(room);
+  }
+
+  // реконнект: снести все пикапы — новая комната перешлёт коллекцию
+  rebind(room: Room): void {
+    this.items.forEach((entry) => {
+      this.dispose(entry);
+      this.scene.remove(entry.group);
+    });
+    this.items.clear();
+    this.attach(room);
+  }
+
+  private attach(room: Room): void {
+    this.room = room;
     const $ = getStateCallbacks(room);
     $(room.state).pickups.onAdd((pk: any, id: string) => {
       const group = new THREE.Group();

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildWorld } from './world.js';
-import { connect } from './net.js';
+import { connect, reconnect } from './net.js';
 import { Avatars } from './avatars.js';
 import { InputController, isTypingTarget } from './input.js';
 import { Prediction } from './prediction.js';
@@ -12,11 +12,10 @@ import { CityMapRenderer, type MapMarker } from './minimap.js';
 import { Fullmap } from './fullmap.js';
 import { Phone } from './phone.js';
 import { Feed } from './feed.js';
-import type { Room } from 'colyseus.js';
 import { t, setLang, getLang, applyStatic } from './i18n/index.js';
+import type { Room } from 'colyseus.js';
 
-// статика экрана входа — сразу на выбранном языке
-applyStatic();
+applyStatic(); // статика экрана входа — сразу на языке пользователя
 
 const joinScreen = document.getElementById('join')!;
 const nameInput = document.getElementById('nameInput') as HTMLInputElement;
@@ -52,17 +51,16 @@ async function start(role: string): Promise<void> {
   }
   joinScreen.style.display = 'none';
   document.getElementById('hud')!.classList.remove('hidden');
-  // первый ROOM_STATE приходит отдельным сообщением после join, и в нём
-  // serverTime ещё 0 (тики его обновят) — ждём живое значение, иначе
-  // поля state undefined (падение в Avatars) и съезжают таймеры баннеров
+  await waitLiveState(room);
+  bootGame(room);
+}
+
+// первый ROOM_STATE приходит отдельным сообщением после join/reconnect, и в нём
+// serverTime ещё 0 — ждём живое значение, иначе поля state undefined и съезжают таймеры
+async function waitLiveState(room: Room): Promise<void> {
   while (!room.state.serverTime) {
     await new Promise<void>((resolve) => room.onStateChange.once(() => resolve()));
   }
-  // consented leave клиент не шлёт — любой onLeave это потеря соединения.
-  // Прозрачного реконнекта пока нет (бэклог) — перезагрузка на экран входа;
-  // при повторном входе история чата запросится заново
-  room.onLeave(() => location.reload());
-  bootGame(room);
 }
 
 function bootGame(room: Room): void {
@@ -82,27 +80,23 @@ function bootGame(room: Room): void {
   const mapRenderer = new CityMapRenderer(map);
   const fullmap = new Fullmap(mapRenderer, input);
   const phone = new Phone(room, map, input, (text) => ui.showToast(text), () => avatars.serverNow());
-  room.onMessage('notice', (m: { code?: string; until?: number }) => {
-    if (m?.code === 'muted' && m.until) {
-      const locale = getLang() === 'ru' ? 'ru-RU' : 'en-US';
-      ui.showToast(t('notice.muted', { time: new Date(m.until).toLocaleTimeString(locale) }));
-    } // старый text-формат не принимаем — старые клиенты отвергнуты PROTOCOL_VERSION
-  });
   const feed = new Feed();
-  feed.bind(room);
-  room.onMessage('delivered', (m: { reward: number }) => {
-    ui.showToast(`+${m.reward}$`); // сумма числом — универсально для обоих языков
-    effects.cashIn();
-  });
+  const minimapCanvas = document.getElementById('minimap') as HTMLCanvasElement;
+  const prediction = new Prediction();
+  const overlay = document.getElementById('reconnectOverlay')!;
+  let current = room;
+  let lastCarId = '';
+  let reconnecting = false;
+
+  phone.onOpen = () => fullmap.close();
+  fullmap.onOpen = () => phone.close();
+  feed.bind(current);
+
   // effects создан раньше — его keydown переключает mute первым, здесь читаем уже новое значение
   window.addEventListener('keydown', (e) => {
     if (isTypingTarget()) return; // не срабатываем при печати в чате/полях
     if (e.code === 'KeyN' && !e.repeat) ui.showToast(t(effects.muted ? 'sound.off' : 'sound.on'));
   });
-  phone.onOpen = () => fullmap.close();
-  fullmap.onOpen = () => phone.close();
-  const minimapCanvas = document.getElementById('minimap') as HTMLCanvasElement;
-  let lastCarId = '';
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -110,12 +104,58 @@ function bootGame(room: Room): void {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
+  // сообщения комнаты + onLeave: вызывается на старте и после каждого реконнекта
+  const bindRoomMessages = (r: Room): void => {
+    r.onMessage('notice', (m: { code?: string; until?: number }) => {
+      if (m?.code === 'muted' && m.until) {
+        const locale = getLang() === 'ru' ? 'ru-RU' : 'en-US';
+        ui.showToast(t('notice.muted', { time: new Date(m.until).toLocaleTimeString(locale) }));
+      } // старый text-формат не принимаем — старые клиенты отвергнуты PROTOCOL_VERSION
+    });
+    r.onMessage('delivered', (m: { reward: number }) => {
+      ui.showToast(`+${m.reward}$`); // сумма числом — универсально для обоих языков
+      effects.cashIn();
+    });
+    r.onLeave((code) => void onLeave(code));
+  };
+
+  const onLeave = async (code: number): Promise<void> => {
+    if (code === 4000) { location.reload(); return; } // кик/consented — окна реконнекта нет
+    if (reconnecting) return;
+    reconnecting = true;
+    overlay.textContent = t('reconnect');
+    overlay.classList.remove('hidden');
+    const token = current.reconnectionToken;
+    for (let i = 0; i < 10; i++) { // окно сервера 10 с (allowReconnection) — 10 попыток по секунде
+      await new Promise(r => setTimeout(r, 1000));
+      try {
+        const fresh = await reconnect(token);
+        await waitLiveState(fresh);
+        current = fresh;
+        avatars.rebind(fresh);
+        pickups.rebind(fresh);
+        effects.bind(fresh);
+        ui.bind(fresh);
+        phone.bind(fresh);
+        feed.bind(fresh);
+        input.setRoom(fresh);
+        prediction.reset();
+        bindRoomMessages(fresh);
+        overlay.classList.add('hidden');
+        reconnecting = false;
+        return;
+      } catch { /* сервер ещё держит место или недоступен — следующая попытка */ }
+    }
+    location.reload(); // окно вышло — на экран входа (токен клейма ника в localStorage)
+  };
+
+  bindRoomMessages(room);
+
   const clock = new THREE.Clock();
-  const prediction = new Prediction();
   renderer.setAnimationLoop(() => {
     const dt = clock.getDelta();
     input.refresh();
-    const me = (room.state.players as any).get(room.sessionId);
+    const me = (current.state.players as any).get(current.sessionId);
     if (me) {
       const predicted = prediction.update(dt, input.current, me.mode, me.x, me.z);
       avatars.selfPos = predicted ? { x: prediction.x, z: prediction.z } : null;
@@ -129,8 +169,8 @@ function bootGame(room: Room): void {
       if (me.mode === 'car') lastCarId = me.carId;
       const markers: MapMarker[] = [];
       if (me.mode !== 'car' && lastCarId) {
-        const car = (room.state.cars as any).get(lastCarId);
-        if (!car || (car.driverId && car.driverId !== room.sessionId)) lastCarId = '';
+        const car = (current.state.cars as any).get(lastCarId);
+        if (!car || (car.driverId && car.driverId !== current.sessionId)) lastCarId = '';
         else markers.push({ x: car.x, z: car.z, kind: 'car' });
       }
       if (me.cargo) {

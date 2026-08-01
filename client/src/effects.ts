@@ -21,14 +21,22 @@ export class Effects {
   muted = localStorage.getItem('mute') === '1'; // публичное: main.ts читает для тоста
   private prevMode = '';
 
-  constructor(private scene: THREE.Scene, private room: Room, private avatars: Avatars) {
-    room.onMessage('shot', (msg: any) => this.onShot(room.sessionId, msg));
-    room.onMessage('hit', (msg: any) => this.onHit(msg));
-    room.onMessage('swing', (msg: any) => this.avatars.playSwing(msg.player));
+  private room!: Room; // не readonly: реконнект переприсваивает через bind
+
+  constructor(private scene: THREE.Scene, room: Room, private avatars: Avatars) {
+    this.bind(room);
     window.addEventListener('keydown', (e) => {
       if (isTypingTarget()) return; // не глушим звук при печати в чате/полях
       if (e.code === 'KeyN' && !e.repeat) this.toggleMute();
     });
+  }
+
+  // реконнект: сообщения подписываем на новую комнату (DOM-слушатель N остаётся в конструкторе)
+  bind(room: Room): void {
+    this.room = room;
+    room.onMessage('shot', (msg: any) => this.onShot(room.sessionId, msg));
+    room.onMessage('hit', (msg: any) => this.onHit(msg));
+    room.onMessage('swing', (msg: any) => this.avatars.playSwing(msg.player));
     room.onMessage('picked', (m: { kind: string }) => {
       // подбор: деньги — «монетка», остальное — короткий блип
       if (m.kind === 'cash') this.tone(660, 0.12, 'sine', 0.07, 990);

@@ -35,6 +35,34 @@ export class Fullmap {
       this.renderNow();
     });
     this.canvas.addEventListener('mousedown', (e) => { this.dragging = true; this.lastX = e.clientX; this.lastY = e.clientY; });
+    // тач: один палец — пан, два — pinch-зум
+    let pinchDist = 0;
+    this.canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        this.dragging = true;
+        this.lastX = e.touches[0].clientX;
+        this.lastY = e.touches[0].clientY;
+      } else if (e.touches.length === 2) {
+        this.dragging = false;
+        pinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      }
+    }, { passive: true });
+    this.canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault(); // не скроллить страницу под картой
+      if (e.touches.length === 1 && this.dragging) {
+        const fit = Math.min(this.canvas.width, this.canvas.height) / (MAP_HALF * 2);
+        this.panX -= (e.touches[0].clientX - this.lastX) / (fit * this.zoom);
+        this.panZ -= (e.touches[0].clientY - this.lastY) / (fit * this.zoom);
+        this.lastX = e.touches[0].clientX;
+        this.lastY = e.touches[0].clientY;
+      } else if (e.touches.length === 2 && pinchDist > 0) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        this.zoom = Math.min(FULLMAP_MAX_ZOOM, Math.max(1, this.zoom * (d / pinchDist)));
+        pinchDist = d;
+      }
+      this.renderNow();
+    }, { passive: false });
+    this.canvas.addEventListener('touchend', () => { this.dragging = false; pinchDist = 0; });
     window.addEventListener('mouseup', () => { this.dragging = false; });
     window.addEventListener('mousemove', (e) => {
       if (!this.dragging || !this.isOpen) return;

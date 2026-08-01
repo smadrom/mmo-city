@@ -13,11 +13,21 @@ export class InputController {
   readonly current: MoveInput = { up: false, down: false, left: false, right: false, sprint: false, rotY: 0 };
   private keys = new Set<string>();
   private blocked = false; // оверлей (телефон/карта) — игровой ввод глушим
+  private touch = { x: 0, y: 0 }; // джойстик -1..1 (тач)
+  private touchSprint = false;    // кнопка «Бег» — тоггл (тач)
 
   setBlocked(v: boolean): void {
     this.blocked = v;
-    if (v) { this.keys.clear(); this.aiming = false; this.refresh(); }
+    if (v) {
+      this.keys.clear(); this.aiming = false;
+      this.touch = { x: 0, y: 0 }; this.touchSprint = false; // тач-стейт глушим вместе с клавишами
+      this.refresh();
+    }
   }
+
+  setTouchMove(x: number, y: number): void { this.touch.x = x; this.touch.y = y; }
+  setTouchLook(dYaw: number): void { this.yaw += dYaw; }
+  toggleTouchSprint(): void { this.touchSprint = !this.touchSprint; }
 
   constructor(private room: Room, dom: HTMLElement) {
     window.addEventListener('keydown', (e) => {
@@ -35,6 +45,7 @@ export class InputController {
 
     dom.addEventListener('click', () => {
       if (this.blocked) return; // оверлей закрывается только своей клавишей — клик по canvas под ним игнорируем
+      if ('ontouchstart' in window) { this.room.send('attack'); return; } // на таче pointer lock нет — тап = атака
       if (document.pointerLockElement !== dom) dom.requestPointerLock();
       else this.room.send('attack');
     });
@@ -58,11 +69,12 @@ export class InputController {
   }
 
   refresh(): void {
-    this.current.up = this.keys.has('KeyW');
-    this.current.down = this.keys.has('KeyS');
-    this.current.left = this.keys.has('KeyA');
-    this.current.right = this.keys.has('KeyD');
-    this.current.sprint = this.keys.has('ShiftLeft');
+    const t = this.touch;
+    this.current.up = this.keys.has('KeyW') || t.y < -0.3;
+    this.current.down = this.keys.has('KeyS') || t.y > 0.3;
+    this.current.left = this.keys.has('KeyA') || t.x < -0.3;
+    this.current.right = this.keys.has('KeyD') || t.x > 0.3;
+    this.current.sprint = this.keys.has('ShiftLeft') || this.touchSprint || Math.hypot(t.x, t.y) > 0.92;
     this.current.rotY = this.yaw;
   }
 }

@@ -103,4 +103,6 @@ export const en: Record<keyof typeof ru, string> = {
   'sound.off': 'Sound off',
   'touch.attack': 'Fire',
   'touch.run': 'Run',
+  'touch.phone': 'Phone',
+  'touch.map': 'Map',
 };

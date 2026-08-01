@@ -101,4 +101,6 @@ export const ru: Record<string, string> = {
   'sound.off': 'Звук выключен',
   'touch.attack': 'Удар',
   'touch.run': 'Бег',
+  'touch.phone': 'Телефон',
+  'touch.map': 'Карта',
 };

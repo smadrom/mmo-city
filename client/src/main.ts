@@ -12,6 +12,7 @@ import { CityMapRenderer, type MapMarker } from './minimap.js';
 import { Fullmap } from './fullmap.js';
 import { Phone } from './phone.js';
 import { Feed } from './feed.js';
+import { TouchControls } from './touch.js';
 import { t, setLang, getLang, applyStatic } from './i18n/index.js';
 import type { Room } from 'colyseus.js';
 
@@ -154,6 +155,14 @@ function bootGame(room: Room): void {
   };
 
   bindRoomMessages(room);
+
+  // тач-управление: hooks шлют через current — после реконнекта попадают в новую комнату
+  new TouchControls(input, {
+    attack: () => current.send('attack'),
+    interact: () => current.send('interact'),
+    togglePhone: () => (phone.isOpen ? phone.close() : phone.open()),
+    toggleMap: () => (fullmap.isOpen ? fullmap.close() : fullmap.open()),
+  });
 
   const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {

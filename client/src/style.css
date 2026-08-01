@@ -185,3 +185,25 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
   #chatInput { bottom: 134px; }
   #deathTitle { font-size: 30px; }
 }
+
+/* тач-управление: джойстик и кнопки (показывает touch.ts только на тач-устройствах) */
+#touchUI { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+#stick {
+  position: absolute; bottom: 30px; left: 30px; width: 120px; height: 120px;
+  border-radius: 50%; background: rgba(255,255,255,.08);
+  border: 2px solid rgba(255,255,255,.25); pointer-events: auto; touch-action: none;
+}
+#nub {
+  position: absolute; left: 35px; top: 35px; width: 50px; height: 50px;
+  border-radius: 50%; background: rgba(255,255,255,.3);
+}
+#touchUI button {
+  position: absolute; width: 64px; height: 64px; border-radius: 50%;
+  background: rgba(0,0,0,.45); color: #fff; font-size: 14px;
+  border: 2px solid rgba(255,255,255,.3); pointer-events: auto; touch-action: none;
+}
+#btnAttack { right: 30px; bottom: 100px; width: 84px; height: 84px; font-size: 16px; }
+#btnE { right: 130px; bottom: 40px; }
+#btnRun { right: 40px; bottom: 200px; }
+#btnPhone { right: 130px; bottom: 130px; }
+#btnMap { right: 210px; bottom: 40px; }

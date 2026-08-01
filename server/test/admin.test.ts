@@ -54,6 +54,7 @@ describe('админ API', () => {
     const body = await res.json();
     expect(body.status).toBe('ok');
     expect(body.players).toBe(1); // stubRoom зарегистрирован в beforeEach
+    expect(typeof body.rssMb).toBe('number'); // нагрузочный тест читает память отсюда
   });
 
   it('без токена — 401, с неверным — 401', async () => {

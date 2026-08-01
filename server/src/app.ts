@@ -14,7 +14,8 @@ export function createExpressApp(): express.Express {
   app.use(express.json());
   app.get('/', (_req, res) => res.send('mmo2game server'));
   app.get('/healthz', (_req, res) => {
-    res.json({ status: 'ok', players: getRoom()?.adminState().playersOnline ?? 0, uptimeSec: Math.floor(process.uptime()) });
+    // rssMb — нагрузочный тест и мониторинг: рост памяти под нагрузкой виден снаружи
+    res.json({ status: 'ok', players: getRoom()?.adminState().playersOnline ?? 0, uptimeSec: Math.floor(process.uptime()), rssMb: Math.round(process.memoryUsage().rss / 1048576) });
   });
   app.use('/admin/api', adminApi());
   app.use('/admin', express.static(path.join(dirname, '../public'))); // dev-раздача админки; в prod — nginx

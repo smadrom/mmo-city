@@ -4,9 +4,9 @@ import { isTypingTarget, type InputController } from './input.js';
 
 interface DialogRow { withNick: string; lastText: string; lastTs: number; unread: number }
 interface SmsItem { id: number; fromNick: string; text: string; ts: number }
-type Screen = 'phoneHome' | 'appSms' | 'appThread' | 'appBank' | 'appJob';
+type Screen = 'phoneHome' | 'appSms' | 'appThread' | 'appBank' | 'appJob' | 'appTop';
 
-// Телефон (P): оверлей с приложениями SMS / Банк / Работа.
+// Телефон (P): оверлей с приложениями SMS / Банк / Работа / Рейтинг.
 // Весь пользовательский текст — только textContent.
 export class Phone {
   isOpen = false;
@@ -87,6 +87,7 @@ export class Phone {
     });
     room.onMessage('transferIn', (m: any) => this.toast(`Перевод от ${m.from}: +${m.amount}$`));
     room.onMessage('transferHistory', (m: any) => this.renderTransfers(m.items));
+    room.onMessage('leaderboard', (m: any) => this.renderTop(m.items));
     room.onMessage('jobResult', (m: any) => {
       if (m.ok) return;
       const texts: Record<string, string> = {
@@ -147,11 +148,12 @@ export class Phone {
 
   private show(s: Screen): void {
     this.screen = s;
-    for (const id of ['phoneHome', 'appSms', 'appThread', 'appBank', 'appJob'] as Screen[]) {
+    for (const id of ['phoneHome', 'appSms', 'appThread', 'appBank', 'appJob', 'appTop'] as Screen[]) {
       document.getElementById(id)!.classList.toggle('hidden', id !== s);
     }
     if (s === 'appSms') this.room.send('smsHistoryReq');
     if (s === 'appBank') this.room.send('transferHistoryReq');
+    if (s === 'appTop') this.room.send('leaderboardReq');
     (document.activeElement as HTMLElement | null)?.blur?.();
   }
 
@@ -159,6 +161,7 @@ export class Phone {
     if (app === 'sms') this.show('appSms');
     else if (app === 'bank') this.show('appBank');
     else if (app === 'job') this.show('appJob');
+    else if (app === 'top') this.show('appTop');
   }
 
   private openThread(nick: string): void {
@@ -244,6 +247,17 @@ export class Phone {
       row.addEventListener('click', () => this.openThread(d.withNick));
       box.append(row);
     }
+  }
+
+  private renderTop(items: { name: string; kills: number; deaths: number }[]): void {
+    const box = document.getElementById('topList')!;
+    box.textContent = '';
+    items.forEach((it, i) => {
+      const row = document.createElement('div');
+      row.className = 'transferRow';
+      row.textContent = `${i + 1}. ${it.name} — ${it.kills}/${it.deaths}`; // убийства/смерти
+      box.append(row);
+    });
   }
 
   private renderTransfers(items: { fromNick: string; toNick: string; amount: number; ts: number }[]): void {

@@ -18,6 +18,7 @@ export interface Runtime {
   lastSmsHistAt: number;
   lastSmsThreadAt: number;      // smsThreadReq — отдельный лимит, не конфликтует с smsHistoryReq
   lastTransferHistAt: number;   // transferHistoryReq — свой лимит
+  lastLbAt: number;         // leaderboardReq — свой лимит
   lastWriteAt: number;          // антиспам пишущих эндпоинтов: deposit/withdraw/transfer/smsRead
   lastDamageAt: number;
   arrestProgress: number; // мс, накопленные копом рядом
@@ -47,6 +48,7 @@ export function makeRuntime(now: number): Runtime {
     lastSmsHistAt: -SMS_HISTORY_COOLDOWN_MS,
     lastSmsThreadAt: -SMS_HISTORY_COOLDOWN_MS,
     lastTransferHistAt: -SMS_HISTORY_COOLDOWN_MS,
+    lastLbAt: -SMS_HISTORY_COOLDOWN_MS,
     lastWriteAt: -WRITE_COOLDOWN_MS, // первый пишущий запрос проходит сразу
     lastDamageAt: 0,
     arrestProgress: 0,

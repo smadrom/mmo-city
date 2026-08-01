@@ -118,7 +118,7 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
 .phoneScreen { display: flex; flex-direction: column; height: 100%; gap: 8px; }
 .phoneBar { display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
 .phoneBar button { background: none; border: none; color: #eee; font-size: 18px; cursor: pointer; }
-#smsDialogs, #threadMsgs, #transferList { flex: 1; overflow-y: auto; }
+#smsDialogs, #threadMsgs, #transferList, #topList { flex: 1; overflow-y: auto; }
 .smsRow { padding: 8px; border-bottom: 1px solid #2a2a3a; cursor: pointer; display: flex; justify-content: space-between; }
 .smsRow:hover { background: #262638; }
 .badge { display: inline-block; min-width: 16px; padding: 0 4px; border-radius: 8px; background: #ff4444; color: #fff; font-size: 11px; font-weight: bold; }

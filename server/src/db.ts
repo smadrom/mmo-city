@@ -123,6 +123,11 @@ export class GameDB {
     return row?.s ?? 0;
   }
 
+  // топ по убийствам — лидерборд телефона
+  topByKills(limit = 10): { name: string; kills: number; deaths: number }[] {
+    return this.db.prepare('SELECT name, kills, deaths FROM players ORDER BY kills DESC, deaths ASC LIMIT ?').all(limit) as any[];
+  }
+
   // сумма переводов с IP за окно (суточный антифарм-лимит). Без IP — 0 (лимит не срабатывает)
   ipTransferSum(ip: string, sinceTs: number): number {
     if (!ip) return 0;

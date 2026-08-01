@@ -184,6 +184,17 @@ describe('Телефон (integration)', () => {
     expect(hist.items[0]).toMatchObject({ fromNick: 'th1', toNick: 'th2', amount: 50 });
   });
 
+  it('leaderboardReq → leaderboard с топом по убийствам', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c1 = await testServer.connectTo(room, { name: 'lb1', role: 'citizen' });
+    (room as any).db.save({ name: 'champ', cash: 0, safe: 0, apt: '', kills: 42, deaths: 1, weapon: '', ammo: 0 });
+    let msg: any = null;
+    c1.onMessage('leaderboard', (m) => { msg = m; });
+    c1.send('leaderboardReq');
+    await wait(200);
+    expect(msg.items[0]).toMatchObject({ name: 'champ', kills: 42 });
+  });
+
   it('jobTake/jobDrop: заказ через телефон, требование машины', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     const c1 = await testServer.connectTo(room, { name: 'jobber', role: 'citizen' });

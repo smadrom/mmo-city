@@ -205,6 +205,18 @@ describe('playtime + transfer_log + модерация', () => {
     db.close();
   });
 
+  it('topByKills: порядок по kills desc, лимит', () => {
+    const db = new GameDB(':memory:');
+    for (let i = 0; i < 12; i++) {
+      db.save({ name: `p${i}`, cash: 0, safe: 0, apt: '', kills: i, deaths: 0, weapon: '', ammo: 0 });
+    }
+    const top = db.topByKills(10);
+    expect(top).toHaveLength(10);
+    expect(top[0]).toMatchObject({ name: 'p11', kills: 11 });
+    expect(top[9]).toMatchObject({ name: 'p2', kills: 2 });
+    db.close();
+  });
+
   it('listBans отдаёт все баны', () => {
     const db = new GameDB(':memory:');
     db.ban('b1', '', 'r1', null, false);

@@ -189,6 +189,13 @@ export class CityRoom extends Room<GameState> {
       rt.lastTransferHistAt = now;
       client.send('transferHistory', { items: this.db.getTransfers(p.name, TRANSFER_HISTORY) });
     });
+    this.onMessage('leaderboardReq', (client) => {
+      const rt = this.runtimes.get(client.sessionId);
+      const now = Date.now();
+      if (!rt || now - rt.lastLbAt < SMS_HISTORY_COOLDOWN_MS) return;
+      rt.lastLbAt = now;
+      client.send('leaderboard', { items: this.db.topByKills(10) });
+    });
     this.onMessage('jobTake', (client) => {
       const rt = this.runtimes.get(client.sessionId);
       if (!rt) return;

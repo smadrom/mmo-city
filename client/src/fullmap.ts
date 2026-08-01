@@ -62,7 +62,11 @@ export class Fullmap {
       }
       this.renderNow();
     }, { passive: false });
-    this.canvas.addEventListener('touchend', () => { this.dragging = false; pinchDist = 0; });
+    // touchend И touchcancel: при системном прерывании касания touchend не приходит,
+    // без сброса dragging/pinchDist карта залипает
+    const onTouchEnd = (): void => { this.dragging = false; pinchDist = 0; };
+    this.canvas.addEventListener('touchend', onTouchEnd);
+    this.canvas.addEventListener('touchcancel', onTouchEnd);
     window.addEventListener('mouseup', () => { this.dragging = false; });
     window.addEventListener('mousemove', (e) => {
       if (!this.dragging || !this.isOpen) return;

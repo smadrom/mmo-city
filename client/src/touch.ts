@@ -40,6 +40,7 @@ export class TouchControls {
       nub.style.top = '35px';
     };
     stick.addEventListener('touchstart', (e) => {
+      if (stickId !== -1) return; // стик уже занят другим пальцем — не перехватываем
       const t0 = e.changedTouches[0];
       stickId = t0.identifier;
       moveStick(t0.clientX, t0.clientY);
@@ -50,12 +51,16 @@ export class TouchControls {
         if (t0.identifier === stickId) moveStick(t0.clientX, t0.clientY);
       }
     }, { passive: true });
-    window.addEventListener('touchend', (e) => {
+    // touchend И touchcancel: при системном прерывании касания touchend не приходит,
+    // без сброса stickId/lookId персонаж "залипает" в беге, а камера блокируется
+    const onTouchEnd = (e: TouchEvent): void => {
       for (const t0 of Array.from(e.changedTouches)) {
         if (t0.identifier === stickId) { stickId = -1; resetStick(); }
         if (t0.identifier === lookId) lookId = -1;
       }
-    }, { passive: true });
+    };
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
     // --- камера: свайп по правой части экрана (не по кнопкам/оверлеям) ---
     window.addEventListener('touchstart', (e) => {

@@ -21,7 +21,7 @@ export function setLang(l: Lang): void {
 // отсутствующий ключ: fallback ru → сам ключ (заметно в dev)
 export function t(key: string, params?: Record<string, string | number>): string {
   let s = dicts[lang][key] ?? ru[key] ?? key;
-  if (params) for (const [k, v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, String(v));
+  if (params) for (const [k, v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, () => String(v)); // () => — иначе $-паттерны в никах едят плейсхолдер
   return s;
 }
 

@@ -78,6 +78,14 @@ function bootGame(room: Room): void {
   room.onMessage('notice', (m: { text?: string }) => { if (m?.text) ui.showToast(String(m.text)); }); // мут и прочие серверные уведомления
   const feed = new Feed();
   feed.bind(room);
+  room.onMessage('delivered', (m: { reward: number }) => {
+    ui.showToast(`+${m.reward}$`); // Task 14 заменит на t()
+    effects.cashIn();
+  });
+  // effects создан раньше — его keydown переключает mute первым, здесь читаем уже новое значение
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyN' && !e.repeat) ui.showToast(effects.muted ? 'Звук выключен' : 'Звук включён'); // Task 14 → t()
+  });
   phone.onOpen = () => fullmap.close();
   fullmap.onOpen = () => phone.close();
   const minimapCanvas = document.getElementById('minimap') as HTMLCanvasElement;
@@ -101,7 +109,7 @@ function bootGame(room: Room): void {
       updateCamera(camera, avatars.selfPos?.x ?? me.x, avatars.selfPos?.z ?? me.z, input.yaw);
     }
     avatars.update(dt);
-    effects.update();
+    effects.update(me ?? undefined);
     pickups.update();
     ui.update();
     if (me) {

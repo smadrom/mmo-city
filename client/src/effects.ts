@@ -17,11 +17,21 @@ export class Effects {
   private vignette = document.getElementById('vignette')!;
   private vignetteTimer = 0;
   private audio: AudioContext | null = null;
+  muted = localStorage.getItem('mute') === '1'; // публичное: main.ts читает для тоста
+  private prevMode = '';
 
   constructor(private scene: THREE.Scene, private room: Room, private avatars: Avatars) {
     room.onMessage('shot', (msg: any) => this.onShot(room.sessionId, msg));
     room.onMessage('hit', (msg: any) => this.onHit(msg));
     room.onMessage('swing', (msg: any) => this.avatars.playSwing(msg.player));
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyN' && !e.repeat) this.toggleMute();
+    });
+    room.onMessage('picked', (m: { kind: string }) => {
+      // подбор: деньги — «монетка», остальное — короткий блип
+      if (m.kind === 'cash') this.tone(660, 0.12, 'sine', 0.07, 990);
+      else this.tone(520, 0.08, 'square', 0.05);
+    });
   }
 
   private onShot(myId: string, msg: { from: { x: number; z: number }; to: { x: number; z: number }; victim: string; attacker?: string }): void {
@@ -42,24 +52,43 @@ export class Effects {
       this.vignetteTimer = window.setTimeout(() => this.vignette.classList.add('hidden'), VIGNETTE_MS);
     }
     const me = (this.room.state.players as any).get(myId);
-    if (!me || dist2(msg.from.x, msg.from.z, me.x, me.z) <= SHOT_SOUND_DIST * SHOT_SOUND_DIST) this.click();
+    if (!me || dist2(msg.from.x, msg.from.z, me.x, me.z) <= SHOT_SOUND_DIST * SHOT_SOUND_DIST) this.tone(1200, 0.06, 'square', 0.06);
   }
 
-  // опциональный щелчок без ассетов (спека 5)
-  private click(): void {
+  toggleMute(): boolean {
+    this.muted = !this.muted;
+    localStorage.setItem('mute', this.muted ? '1' : '0');
+    return this.muted;
+  }
+
+  // доставка оплачена: восходящая «монетка» (main.ts дёргает на 'delivered')
+  cashIn(): void {
+    this.tone(523, 0.25, 'sine', 0.08, 1046);
+  }
+
+  // мини-синтез без ассетов: тон с экспоненциальным затуханием, опциональный слайд частоты
+  private tone(freq: number, dur: number, type: OscillatorType = 'sine', vol = 0.08, slideTo = 0): void {
+    if (this.muted) return;
     try {
       this.audio ??= new AudioContext();
+      const t0 = this.audio.currentTime;
       const osc = this.audio.createOscillator();
       const gain = this.audio.createGain();
-      gain.gain.setValueAtTime(0.08, this.audio.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.audio.currentTime + 0.06);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t0);
+      if (slideTo > 0) osc.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+      gain.gain.setValueAtTime(vol, t0);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
       osc.connect(gain).connect(this.audio.destination);
       osc.start();
-      osc.stop(this.audio.currentTime + 0.06);
+      osc.stop(t0 + dur);
     } catch { /* звук опционален, без него играбельно */ }
   }
 
-  private onHit(msg: { victim: string; damage: number; x: number; z: number }): void {
+  private onHit(msg: { victim: string; attacker?: string; damage: number; x: number; z: number }): void {
+    const myId = this.room.sessionId;
+    if (msg.attacker === myId && msg.victim !== myId) this.tone(880, 0.05, 'square', 0.05); // я попал
+    if (msg.victim === myId) this.tone(140, 0.15, 'sawtooth', 0.09); // по мне
     const canvas = document.createElement('canvas');
     canvas.width = 128;
     canvas.height = 64;
@@ -79,7 +108,9 @@ export class Effects {
     this.damageNumbers.push({ sprite, bornAt: performance.now() });
   }
 
-  update(): void {
+  update(me?: { mode: string }): void {
+    if (me && me.mode === 'dead' && this.prevMode !== 'dead') this.tone(300, 0.5, 'sawtooth', 0.09, 60); // моя смерть
+    if (me) this.prevMode = me.mode;
     const now = performance.now();
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];

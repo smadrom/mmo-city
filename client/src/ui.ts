@@ -1,5 +1,5 @@
 import {
-  DOOR_DIST, CAR_ENTER_DIST, DELIVERY_PICKUP_DIST, RENT_PRICE,
+  DOOR_DIST, CAR_ENTER_DIST, DELIVERY_PICKUP_DIST, RENT_PRICE, MAX_HP,
   WEAPONS, AMMO_PACK_PRICE, AMMO_PACK_SIZE, CHAT_MAX_LEN, TARGET_LABELS,
   deliveryReward, dist2, type CityMap, type WeaponKind,
 } from '@mmo/shared';
@@ -9,6 +9,9 @@ import type { InputController } from './input.js';
 
 export class UI {
   private stats = document.getElementById('stats')!;
+  private hpfill = document.getElementById('hpfill')!;
+  private hptext = document.getElementById('hptext')!;
+  private ammoBig = document.getElementById('ammoBig')!;
   private banner = document.getElementById('banner')!;
   private prompt = document.getElementById('prompt')!;
   private safeDialog = document.getElementById('safeDialog')!;
@@ -143,13 +146,19 @@ export class UI {
       && me.mode !== 'dead' && dialogsClosed;
     this.crosshair.classList.toggle('hidden', !showCross);
 
+    const k = Math.max(0, Math.min(1, me.hp / MAX_HP));
+    this.hpfill.style.width = `${k * 100}%`;
+    // цвет бара: зелёный → жёлтый → красный по мере потери HP
+    (this.hpfill.style as any).background = k > 0.5 ? '#33cc33' : k > 0.25 ? '#ddaa22' : '#cc2222';
+    this.hptext.textContent = `${Math.ceil(me.hp)}`;
     const roleRu = me.role === 'cop' ? 'Полицейский' : 'Гражданин';
     const w = me.weapon && Object.hasOwn(WEAPONS, me.weapon) ? WEAPONS[me.weapon as WeaponKind] : null;
-    const weaponLine = `Оружие: ${w ? w.name : 'Кулаки'}${w?.ranged ? ` · ${me.ammo}` : ''}`;
+    this.ammoBig.classList.toggle('hidden', !w?.ranged);
+    if (w?.ranged) this.ammoBig.textContent = `▸ ${me.ammo}`;
     this.stats.textContent =
-      `HP: ${Math.ceil(me.hp)}  |  Наличные: ${me.cash}$  |  Сейф: ${me.safe}$\n` +
+      `Наличные: ${me.cash}$  |  Сейф: ${me.safe}$\n` +
       `${roleRu}${me.apt ? `  |  Квартира: ${me.apt}` : ''}\n` +
-      weaponLine;
+      `Оружие: ${w ? w.name : 'Кулаки'}`;
 
     // Баннеры: все активные строки сразу (например, розыск + груз одновременно)
     const lines: string[] = [];

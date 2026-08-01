@@ -1,6 +1,7 @@
 import {
   DOOR_DIST, CAR_ENTER_DIST, DELIVERY_PICKUP_DIST, RENT_PRICE, MAX_HP,
   WEAPONS, AMMO_PACK_PRICE, AMMO_PACK_SIZE, CHAT_MAX_LEN, TARGET_LABELS,
+  RESPAWN_DELAY_MS,
   deliveryReward, dist2, type CityMap, type WeaponKind,
 } from '@mmo/shared';
 import type { Room } from 'colyseus.js';
@@ -12,6 +13,9 @@ export class UI {
   private hpfill = document.getElementById('hpfill')!;
   private hptext = document.getElementById('hptext')!;
   private ammoBig = document.getElementById('ammoBig')!;
+  private deathOverlay = document.getElementById('deathOverlay')!;
+  private deathTimer = document.getElementById('deathTimer')!;
+  private diedAt = 0; // performance.now() входа в mode='dead' — отсчёт респавна
   private banner = document.getElementById('banner')!;
   private prompt = document.getElementById('prompt')!;
   private safeDialog = document.getElementById('safeDialog')!;
@@ -186,9 +190,19 @@ export class UI {
       const target = TARGET_LABELS[me.deliveryTarget] ?? me.deliveryTarget;
       lines.push(`Груз → ${target}: ${Math.max(0, Math.ceil((me.deliveryDeadline - nowServer) / 1000))} сек (+${deliveryReward(this.map, me.deliveryTarget)}$)`);
     }
-    if (me.mode === 'dead') lines.push('Вы погибли. Респаун...');
     this.banner.textContent = lines.join('\n');
     this.banner.classList.toggle('hidden', lines.length === 0);
+
+    // экран смерти с отсчётом до респавна (зомби-режимов у игрока нет — всегда RESPAWN_DELAY_MS)
+    if (me.mode === 'dead') {
+      if (!this.diedAt) this.diedAt = performance.now();
+      const left = Math.max(0, Math.ceil((RESPAWN_DELAY_MS - (performance.now() - this.diedAt)) / 1000));
+      this.deathTimer.textContent = `Респаун через ${left}`;
+      this.deathOverlay.classList.remove('hidden');
+    } else {
+      this.diedAt = 0;
+      this.deathOverlay.classList.add('hidden');
+    }
 
     // авто-закрытие диалогов: отошёл от двери/магазина, сел в машину или умер
     if (!this.safeDialog.classList.contains('hidden') && !this.nearOwnDoor(me)) {

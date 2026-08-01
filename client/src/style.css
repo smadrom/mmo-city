@@ -137,3 +137,11 @@ button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
 .transferRow { padding: 6px; border-bottom: 1px solid #2a2a3a; font-size: 13px; color: #bbb; }
 #jobInfo { padding: 8px; line-height: 1.5; }
 #jobBtn { width: 100%; padding: 12px; font-size: 15px; }
+
+#deathOverlay {
+  position: fixed; inset: 0; z-index: 7; pointer-events: none;
+  background: rgba(60, 0, 0, .45); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+}
+#deathTitle { color: #ff6666; font-size: 42px; font-weight: bold; text-shadow: 0 0 12px #000; }
+#deathTimer { color: #fff; font-size: 20px; text-shadow: 0 0 6px #000; }

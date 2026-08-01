@@ -3,6 +3,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { createCityMap, ROADS, ROAD_WIDTH, MAP_HALF, type CityMap, type Point, type BuildingDef } from '@mmo/shared';
 import { t } from './i18n/index.js';
 
+export interface WorldFx { update(now: number): void }
+const DAY_MS = 10 * 60_000; // полный цикл день/ночь
+
 // t() вызывается при построении мира (после выбора языка на экране входа),
 // а не при импорте модуля — иначе подписи застрянут на языке загрузки страницы
 function kindLabel(kind: BuildingDef['kind']): string {
@@ -48,7 +51,7 @@ function getWindowsTexture(): THREE.CanvasTexture {
   return windowsTex;
 }
 
-export function buildWorld(scene: THREE.Scene): CityMap {
+export function buildWorld(scene: THREE.Scene): { map: CityMap; fx: WorldFx } {
   const map = createCityMap();
 
   scene.background = new THREE.Color(0x87ceeb);
@@ -65,7 +68,8 @@ export function buildWorld(scene: THREE.Scene): CityMap {
   sun.shadow.camera.far = 600;
   scene.add(sun);
   scene.add(sun.target); // цель — центр города (0,0,0)
-  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  const amb = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(amb);
 
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(MAP_HALF * 2, MAP_HALF * 2),
@@ -218,5 +222,24 @@ export function buildWorld(scene: THREE.Scene): CityMap {
   graveLabel.position.set(grave.x, 5, grave.z);
   scene.add(graveLabel);
 
-  return map;
+  // день/ночь: плавный лерп солнца/неба/тумана по 10-минутному циклу
+  const skyDay = new THREE.Color(0x87ceeb);
+  const skyNight = new THREE.Color(0x0a0a2e);
+  const sunDay = new THREE.Color(0xffffff);
+  const sunNight = new THREE.Color(0x8899ff);
+  const bg = scene.background as THREE.Color;
+  const fogColor = (scene.fog as THREE.Fog).color;
+  const fx: WorldFx = {
+    update(now: number) {
+      const phase = ((now + DAY_MS * 0.3) % DAY_MS) / DAY_MS; // сдвиг фазы: вход — день
+      const d = 0.5 + 0.5 * Math.sin((phase - 0.25) * Math.PI * 2); // 0 = полночь, 1 = полдень
+      sun.intensity = 0.25 + 0.95 * d;
+      amb.intensity = 0.25 + 0.3 * d;
+      sun.color.lerpColors(sunNight, sunDay, d);
+      bg.lerpColors(skyNight, skyDay, d);
+      fogColor.lerpColors(skyNight, skyDay, d);
+    },
+  };
+
+  return { map, fx };
 }

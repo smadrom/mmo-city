@@ -1,5 +1,5 @@
 import {
-  DELIVERY_REWARD, DELIVERY_TIME_MS, DELIVERY_PICKUP_DIST, DELIVERY_DROP_DIST,
+  deliveryReward, DELIVERY_TIME_MS, DELIVERY_PICKUP_DIST, DELIVERY_DROP_DIST,
   TRANSFER_MIN, TRANSFER_MAX, TRANSFER_MIN_PLAYTIME_SEC, TRANSFER_IP_DAILY_LIMIT,
   dist2, type CityMap,
 } from '@mmo/shared';
@@ -57,9 +57,10 @@ export function tickDelivery(state: GameState, map: CityMap, now: number): void 
     if (p.mode !== 'car') return; // сдавать груз можно только из машины
     const t = map.deliveryTargets.find(t => t.id === p.deliveryTarget);
     if (t && dist2(p.x, p.z, t.x, t.z) < DELIVERY_DROP_DIST * DELIVERY_DROP_DIST) {
+      const reward = deliveryReward(map, p.deliveryTarget); // до очистки target
       p.cargo = false;
       p.deliveryTarget = '';
-      p.cash += DELIVERY_REWARD;
+      p.cash += reward;
     }
   });
 }

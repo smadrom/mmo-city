@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GameState, Player, Car } from '../src/schema/GameState.js';
 import { tryStartDelivery, tickDelivery, tryTransfer, tryTakeJob, tryDropJob } from '../src/systems/economy.js';
-import { DELIVERY_REWARD, DELIVERY_TIME_MS, createCityMap, START_CASH, TRANSFER_MAX } from '@mmo/shared';
+import { deliveryReward, DELIVERY_TIME_MS, createCityMap, START_CASH, TRANSFER_MAX } from '@mmo/shared';
 import { GameDB } from '../src/db.js';
 
 const map = createCityMap();
@@ -45,15 +45,22 @@ describe('доставка', () => {
     expect(tryStartDelivery(state, 's1', map, 1000)).toBe(false);
   });
 
-  it('доставка в точку: награда, груз снят', () => {
+  it('доставка в точку: награда от дистанции, груз снят', () => {
     const { state, p } = setup();
     tryStartDelivery(state, 's1', map, 1000);
     const target = map.deliveryTargets.find(t => t.id === p.deliveryTarget)!;
+    const expected = deliveryReward(map, target.id);
     p.x = target.x; p.z = target.z;
     tickDelivery(state, map, 2000);
     expect(p.cargo).toBe(false);
-    expect(p.cash).toBe(DELIVERY_REWARD);
+    expect(p.cash).toBe(expected);
     expect(p.deliveryTarget).toBe('');
+  });
+
+  it('дальняя точка платит больше ближней', () => {
+    expect(deliveryReward(map, 'port')).toBeGreaterThan(deliveryReward(map, 'shop'));
+    expect(deliveryReward(map, 'shop')).toBeGreaterThanOrEqual(60); // база
+    expect(deliveryReward(map, 'ghost')).toBe(60); // неизвестная точка — база
   });
 
   it('пешком груз не сдаётся — только из машины', () => {

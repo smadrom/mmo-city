@@ -1,4 +1,4 @@
-import { SMS_HISTORY_COOLDOWN_MS, TARGET_LABELS } from '@mmo/shared';
+import { SMS_HISTORY_COOLDOWN_MS, TARGET_LABELS, deliveryReward, type CityMap } from '@mmo/shared';
 import type { Room } from 'colyseus.js';
 import { isTypingTarget, type InputController } from './input.js';
 
@@ -23,6 +23,7 @@ export class Phone {
 
   constructor(
     private room: Room,
+    private map: CityMap,
     private input: InputController,
     private toast: (t: string) => void,
     private serverNow: () => number,
@@ -126,7 +127,8 @@ export class Phone {
     if (me.cargo) {
       const target = TARGET_LABELS[me.deliveryTarget] ?? me.deliveryTarget;
       const left = Math.max(0, Math.ceil((me.deliveryDeadline - this.serverNow()) / 1000));
-      info.textContent = `Заказ: груз → ${target}. Осталось ${left} сек. Сдача — доехать до точки на машине.`;
+      const reward = deliveryReward(this.map, me.deliveryTarget);
+      info.textContent = `Заказ: груз → ${target}. Осталось ${left} сек. Награда ${reward}$. Сдача — доехать до точки на машине.`;
       btn.textContent = 'Отказаться от заказа';
     } else {
       info.textContent = me.mode === 'car'

@@ -72,7 +72,7 @@ function bootGame(room: Room): void {
   const pickups = new Pickups(scene, room);
   const mapRenderer = new CityMapRenderer(map);
   const fullmap = new Fullmap(mapRenderer, input);
-  const phone = new Phone(room, input, (t) => ui.showToast(t), () => avatars.serverNow());
+  const phone = new Phone(room, map, input, (t) => ui.showToast(t), () => avatars.serverNow());
   room.onMessage('notice', (m: { text?: string }) => { if (m?.text) ui.showToast(String(m.text)); }); // мут и прочие серверные уведомления
   phone.onOpen = () => fullmap.close();
   fullmap.onOpen = () => phone.close();

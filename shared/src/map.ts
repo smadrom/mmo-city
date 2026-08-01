@@ -1,4 +1,4 @@
-import { MAP_HALF } from './config.js';
+import { MAP_HALF, DELIVERY_REWARD_BASE, DELIVERY_REWARD_PER_M } from './config.js';
 import type { AABB } from './physics.js';
 
 export const ROADS = [-100, 0, 100];
@@ -105,4 +105,11 @@ export function createCityMap(): CityMap {
       { x: 50, z: 100 }, { x: 0, z: -20 }, { x: 170, z: 170 }, { x: -50, z: 0 },
     ],
   };
+}
+
+// награда растёт с дистанцией склад→точка, иначе выгодно ре-роллить заказ до ближней
+export function deliveryReward(map: CityMap, targetId: string): number {
+  const t = map.deliveryTargets.find(t => t.id === targetId);
+  if (!t) return DELIVERY_REWARD_BASE;
+  return Math.round(DELIVERY_REWARD_BASE + DELIVERY_REWARD_PER_M * Math.hypot(t.x - map.warehouse.x, t.z - map.warehouse.z));
 }

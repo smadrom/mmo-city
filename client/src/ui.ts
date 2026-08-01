@@ -1,7 +1,7 @@
 import {
   DOOR_DIST, CAR_ENTER_DIST, DELIVERY_PICKUP_DIST, RENT_PRICE,
   WEAPONS, AMMO_PACK_PRICE, AMMO_PACK_SIZE, CHAT_MAX_LEN, TARGET_LABELS,
-  dist2, type CityMap, type WeaponKind,
+  deliveryReward, dist2, type CityMap, type WeaponKind,
 } from '@mmo/shared';
 import type { Room } from 'colyseus.js';
 import type { Avatars } from './avatars.js';
@@ -161,7 +161,7 @@ export class UI {
     }
     if (me.cargo) {
       const target = TARGET_LABELS[me.deliveryTarget] ?? me.deliveryTarget;
-      lines.push(`Груз → ${target}: ${Math.max(0, Math.ceil((me.deliveryDeadline - nowServer) / 1000))} сек`);
+      lines.push(`Груз → ${target}: ${Math.max(0, Math.ceil((me.deliveryDeadline - nowServer) / 1000))} сек (+${deliveryReward(this.map, me.deliveryTarget)}$)`);
     }
     if (me.mode === 'dead') lines.push('Вы погибли. Респаун...');
     this.banner.textContent = lines.join('\n');

@@ -48,7 +48,8 @@ export const COP_LIMIT = 20;
 export const COP_PATROL_MIN_DIST = 30; // м смещения между выплатами — иначе AFK-коп не платится
 
 export const START_CASH = 500;
-export const DELIVERY_REWARD = 100;
+export const DELIVERY_REWARD_BASE = 60;   // минимум за заказ
+export const DELIVERY_REWARD_PER_M = 0.4; // + за метр от склада до точки
 export const DELIVERY_TIME_MS = 3 * 60_000;
 export const DELIVERY_PICKUP_DIST = 6;
 export const DELIVERY_DROP_DIST = 6;

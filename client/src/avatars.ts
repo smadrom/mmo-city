@@ -159,6 +159,7 @@ function makeCarMesh(): CarMesh {
     new THREE.MeshLambertMaterial({ color: 0x333344 }),
   );
   cabin.position.set(0, 1.15, -0.2);
+  cabin.castShadow = true; // кабина выше кузова — должна отбрасывать тень
   group.add(cabin);
   const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 10);
   const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
@@ -171,6 +172,7 @@ function makeCarMesh(): CarMesh {
     mount.position.set(wx, 0.35, wz);
     const wheel = new THREE.Mesh(wheelGeo, wheelMat);
     wheel.rotation.z = Math.PI / 2;
+    wheel.castShadow = true; // колёса у земли — без них тень машины «пустая» снизу
     const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.1), spokeMat); // чтобы вращение читалось
     wheel.add(spoke);
     mount.add(wheel);

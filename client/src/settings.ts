@@ -48,13 +48,15 @@ export class Settings {
     this.renderer.setPixelRatio(high ? Math.min(window.devicePixelRatio, 2) : 1);
     this.renderer.shadowMap.enabled = high;
     this.scene.traverse((o) => {
-      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
-      if (m) m.needsUpdate = true;
+      const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(m)) m.forEach(mm => (mm.needsUpdate = true)); // у домов material — массив из 6 (окна)
+      else if (m) m.needsUpdate = true;
     });
   }
 
   open(): void {
     this.isOpen = true;
+    (document.getElementById('setMute') as HTMLInputElement).checked = this.effects.muted; // мьют мог переключиться по N — синхронизируем чекбокс
     document.exitPointerLock();
     this.input.setBlocked(true);
     this.root.classList.remove('hidden');

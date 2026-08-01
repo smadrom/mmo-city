@@ -134,8 +134,10 @@ function bootGame(room: Room): void {
   let rtt = 0;
   window.addEventListener('keydown', (e) => {
     if (e.code === 'F3' && !e.repeat && !isTypingTarget()) {
+      e.preventDefault(); // Firefox: F3 открывает поиск по странице
       debugOn = !debugOn;
       debugEl.classList.toggle('hidden', !debugOn);
+      if (!debugOn) { frames = 0; fpsAt = performance.now(); } // сброс окна замера — иначе повторное включение смешает старое
     }
   });
   let pingT = 0;

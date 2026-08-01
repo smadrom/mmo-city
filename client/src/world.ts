@@ -95,6 +95,7 @@ export function buildWorld(scene: THREE.Scene): { map: CityMap; fx: WorldFx } {
       const road = new THREE.Mesh(geo, roadMat);
       road.rotation.x = -Math.PI / 2;
       road.position.set(vertical ? at : 0, 0.01, vertical ? 0 : at);
+      road.receiveShadow = true; // главная ходовая поверхность — без неё тени «дырявые»
       scene.add(road);
 
       for (const side of [-1, 1]) {
@@ -108,6 +109,7 @@ export function buildWorld(scene: THREE.Scene): { map: CityMap; fx: WorldFx } {
         );
         sidewalk.rotation.x = -Math.PI / 2;
         sidewalk.position.set(vertical ? at + off : 0, 0.02, vertical ? 0 : at + off);
+        sidewalk.receiveShadow = true; // тротуар — та же ходовая поверхность, принимает тени
         scene.add(sidewalk);
       }
 

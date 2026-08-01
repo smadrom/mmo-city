@@ -109,7 +109,9 @@ export class UI {
     });
     room.onMessage('chat', (msg: any) => this.appendChat(msg));
     room.onMessage('sys', (m: { code: string; name: string; t?: number }) => {
-      this.appendChat({ from: '*', text: t(`sys.${m.code}`, { name: m.name }), t: m.t });
+      const key = `sys.${m.code}`;
+      if (t(key) === key) return; // неизвестный sys-код — молчим, не мусорим чат ключом
+      this.appendChat({ from: '*', text: t(key, { name: m.name }), t: m.t });
     });
     room.onMessage('chatHistory', (h: any) => {
       for (const msg of h.items) this.appendChat(msg);

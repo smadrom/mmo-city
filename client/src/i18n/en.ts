@@ -116,7 +116,7 @@ export const en: Record<keyof typeof ru, string> = {
   'settings.qualityHigh': 'High',
   'settings.qualityLow': 'Low',
   'settings.langNote': 'World labels will update after rejoin',
-  'hint.move': 'WASD — move, mouse — camera, wheel — zoom',
+  'hint.move': 'WASD — move, mouse — camera, wheel — zoom, Esc — settings',
   'hint.car': 'Earn by delivery: enter a car (E), then P → Job',
   'hint.wanted': 'Red marker — wanted player. There is a bounty for them',
 };

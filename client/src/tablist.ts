@@ -22,6 +22,11 @@ export class TabList {
       this.open = false;
       this.root.classList.add('hidden');
     });
+    // окно потеряло фокус с зажатым Tab — keyup не придёт, список зависнет
+    window.addEventListener('blur', () => {
+      this.open = false;
+      this.root.classList.add('hidden');
+    });
   }
 
   bind(room: Room): void {

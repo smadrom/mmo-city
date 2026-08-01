@@ -114,7 +114,7 @@ export const ru: Record<string, string> = {
   'settings.qualityHigh': 'Высокое',
   'settings.qualityLow': 'Низкое',
   'settings.langNote': 'Подписи в мире обновятся после перезахода',
-  'hint.move': 'WASD — движение, мышь — камера, колесо — зум',
+  'hint.move': 'WASD — движение, мышь — камера, колесо — зум, Esc — настройки',
   'hint.car': 'Заработок — доставка: сядь в машину (E), затем P → Работа',
   'hint.wanted': 'Красный маркер — розыскной. За такого дают награду',
 };

@@ -87,6 +87,7 @@ function bootGame(room: Room): void {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
   const map = buildWorld(scene);
+  const camColliders = map.buildings.map(b => ({ x: b.x, z: b.z, w: b.w, d: b.d })); // коллизия камеры (M1)
   const avatars = new Avatars(scene, room);
   const input = new InputController(room, renderer.domElement);
   const ui = new UI(room, map, avatars, input);
@@ -216,7 +217,7 @@ function bootGame(room: Room): void {
     if (me) {
       const predicted = prediction.update(dt, input.current, me.mode, me.x, me.z);
       avatars.selfPos = predicted ? { x: prediction.x, z: prediction.z } : null;
-      updateCamera(camera, avatars.selfPos?.x ?? me.x, avatars.selfPos?.z ?? me.z, input.yaw, camDist, input.aiming && document.pointerLockElement !== null, dt);
+      updateCamera(camera, avatars.selfPos?.x ?? me.x, avatars.selfPos?.z ?? me.z, input.yaw, camDist, input.aiming && document.pointerLockElement !== null, dt, camColliders);
     }
     avatars.update(dt);
     effects.update(me ?? undefined);

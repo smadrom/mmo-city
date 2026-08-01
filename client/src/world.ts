@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createCityMap, ROADS, ROAD_WIDTH, MAP_HALF, type CityMap, type Point, type BuildingDef } from '@mmo/shared';
 import { t } from './i18n/index.js';
 
@@ -80,6 +81,7 @@ export function buildWorld(scene: THREE.Scene): CityMap {
   const SIDEWALK_WIDTH = 3;
   const DASH_LENGTH = 3;
   const DASH_STEP = 6;
+  const dashGeos: THREE.BufferGeometry[] = [];
   for (const at of ROADS) {
     for (const vertical of [true, false]) {
       const geo = new THREE.PlaneGeometry(
@@ -106,15 +108,16 @@ export function buildWorld(scene: THREE.Scene): CityMap {
       }
 
       for (let d = -MAP_HALF + DASH_STEP; d <= MAP_HALF - DASH_STEP; d += DASH_STEP) {
-        const dash = new THREE.Mesh(
-          new THREE.BoxGeometry(vertical ? 0.4 : DASH_LENGTH, 0.02, vertical ? DASH_LENGTH : 0.4),
-          lineMat,
-        );
-        dash.position.set(vertical ? at : d, 0.03, vertical ? d : at);
-        scene.add(dash);
+        const g = new THREE.BoxGeometry(vertical ? 0.4 : DASH_LENGTH, 0.02, vertical ? DASH_LENGTH : 0.4);
+        g.translate(vertical ? at : d, 0.03, vertical ? d : at);
+        dashGeos.push(g);
       }
     }
   }
+
+  // сотни штрихов — одним мешем: ~400 draw calls экономии (мобилка)
+  const dashes = mergeGeometries(dashGeos, false);
+  if (dashes) scene.add(new THREE.Mesh(dashes, lineMat));
 
   for (const b of map.buildings) {
     // жилым — окна на боковых гранях (индексы 0,1,4,5), крыша/низ однотонные; спецздания — как раньше
@@ -175,15 +178,16 @@ export function buildWorld(scene: THREE.Scene): CityMap {
 
   // забор вокруг безопасных зон, ворота — южная грань (к дороге)
   const fenceMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
+  const fenceGeos: THREE.BufferGeometry[] = [];
   for (const z of map.safeZones) {
     const minX = z.x - z.w / 2;
     const maxX = z.x + z.w / 2;
     const minZ = z.z - z.d / 2;
     const maxZ = z.z + z.d / 2;
     const seg = (x: number, zz: number, w: number, d: number) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), fenceMat);
-      m.position.set(x, 0.6, zz);
-      scene.add(m);
+      const g = new THREE.BoxGeometry(w, 1.2, d);
+      g.translate(x, 0.6, zz);
+      fenceGeos.push(g);
     };
     for (let x = minX + 1; x <= maxX - 1; x += 2) {
       seg(x, minZ, 2, 0.15);
@@ -197,6 +201,9 @@ export function buildWorld(scene: THREE.Scene): CityMap {
     zoneLabel.position.set(z.x, 4, z.z);
     scene.add(zoneLabel);
   }
+
+  const fence = mergeGeometries(fenceGeos, false);
+  if (fence) scene.add(new THREE.Mesh(fence, fenceMat));
 
   // кладбище у первой точки спавна зомби
   const grave = map.zombieSpawns[0];

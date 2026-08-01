@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Room } from 'colyseus.js';
 import { dist2 } from '@mmo/shared';
 import type { Avatars } from './avatars.js';
+import { isTypingTarget } from './input.js';
 
 const TRACER_MS = 80;
 const VIGNETTE_MS = 150;
@@ -25,6 +26,7 @@ export class Effects {
     room.onMessage('hit', (msg: any) => this.onHit(msg));
     room.onMessage('swing', (msg: any) => this.avatars.playSwing(msg.player));
     window.addEventListener('keydown', (e) => {
+      if (isTypingTarget()) return; // не глушим звук при печати в чате/полях
       if (e.code === 'KeyN' && !e.repeat) this.toggleMute();
     });
     room.onMessage('picked', (m: { kind: string }) => {

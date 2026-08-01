@@ -1,4 +1,6 @@
 import type { Room } from 'colyseus.js';
+import { BOUNTY_REWARD } from '@mmo/shared';
+import { t } from './i18n/index.js';
 
 const MAX_LINES = 5;
 const TTL_MS = 5000;
@@ -13,9 +15,9 @@ export class Feed {
 
   private add(m: { kind: string; a: string; b: string }): void {
     const div = document.createElement('div');
-    div.textContent = m.kind === 'arrest' ? `${m.a} арестовал ${m.b}`
-      : m.kind === 'bounty' ? `${m.a} ☠ ${m.b} (+25$)`
-      : `${m.a} ☠ ${m.b}`; // Task 14 заменит на t() — литералы осознанно временные
+    div.textContent = m.kind === 'arrest' ? t('feed.arrest', { a: m.a, b: m.b })
+      : m.kind === 'bounty' ? t('feed.bounty', { a: m.a, b: m.b, reward: BOUNTY_REWARD })
+      : t('feed.kill', { a: m.a, b: m.b });
     this.root.append(div);
     while (this.root.children.length > MAX_LINES) this.root.firstElementChild?.remove();
     setTimeout(() => div.remove(), TTL_MS);

@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { getStateCallbacks, type Room } from 'colyseus.js';
+import { t } from './i18n/index.js';
 
-const KIND_LABELS: Record<string, string> = {
-  bat: 'Бита', pistol: 'Пистолет', rifle: 'Винтовка', ammo: 'Патроны',
-};
+// функция, а не module-level объект: язык применяется в момент вызова
+function kindLabel(kind: string): string {
+  return t(`weapon.${kind}`);
+}
 
 function makeLabel(text: string): THREE.Sprite {
   const canvas = document.createElement('canvas');
@@ -86,7 +88,7 @@ export class Pickups {
     this.dispose(entry);
     entry.group.clear();
     entry.group.add(makeBody(pk.kind));
-    entry.group.add(makeLabel(pk.kind === 'cash' ? `${pk.amount}$` : KIND_LABELS[pk.kind] ?? pk.kind));
+    entry.group.add(makeLabel(pk.kind === 'cash' ? `${pk.amount}$` : kindLabel(pk.kind)));
     entry.kind = pk.kind;
   }
 

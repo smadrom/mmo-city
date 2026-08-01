@@ -1,12 +1,13 @@
 import {
   DOOR_DIST, CAR_ENTER_DIST, DELIVERY_PICKUP_DIST, RENT_PRICE, MAX_HP,
-  WEAPONS, AMMO_PACK_PRICE, AMMO_PACK_SIZE, CHAT_MAX_LEN, TARGET_LABELS,
+  WEAPONS, AMMO_PACK_PRICE, AMMO_PACK_SIZE, CHAT_MAX_LEN,
   RESPAWN_DELAY_MS,
   deliveryReward, dist2, type CityMap, type WeaponKind,
 } from '@mmo/shared';
 import type { Room } from 'colyseus.js';
 import type { Avatars } from './avatars.js';
 import type { InputController } from './input.js';
+import { t } from './i18n/index.js';
 
 export class UI {
   private stats = document.getElementById('stats')!;
@@ -56,11 +57,7 @@ export class UI {
       this.shopDialog.classList.remove('hidden');
     });
     room.onMessage('shopResult', (msg: any) => {
-      const texts: Record<string, string> = {
-        ok: 'Куплено', too_far: 'Подойди ближе к магазину',
-        no_money: 'Не хватает денег', bad_kind: 'Нет такого оружия',
-      };
-      this.showToast(texts[msg.reason] ?? 'Ошибка покупки');
+      this.showToast(msg.ok ? t('shop.ok') : t(`shop.${msg.reason}`));
     });
     const items = document.getElementById('shopItems')!;
     for (const kind of Object.keys(WEAPONS) as WeaponKind[]) {
@@ -68,14 +65,14 @@ export class UI {
       const row = document.createElement('div');
       row.className = 'shopRow';
       const label = document.createElement('span');
-      label.textContent = `${w.name} — урон ${w.damage}, дальность ${w.range} м`;
+      label.textContent = t('shop.row', { name: t(`weapon.${kind}`), dmg: w.damage, range: w.range });
       const btn = document.createElement('button');
       btn.textContent = `${w.price}$`;
       btn.addEventListener('click', () => room.send('buyWeapon', { kind }));
       row.append(label, btn);
       items.append(row);
     }
-    document.getElementById('buyAmmoBtn')!.textContent = `Патроны +${AMMO_PACK_SIZE} (${AMMO_PACK_PRICE}$)`;
+    document.getElementById('buyAmmoBtn')!.textContent = t('dialog.ammo', { size: AMMO_PACK_SIZE, price: AMMO_PACK_PRICE });
     document.getElementById('buyAmmoBtn')!.addEventListener('click', () => room.send('buyAmmo'));
     document.getElementById('shopClose')!.addEventListener('click', () => this.closeDialogs());
     this.shopDialog.addEventListener('click', (e) => (e.target as HTMLElement).blur());
@@ -169,26 +166,29 @@ export class UI {
     // цвет бара: зелёный → жёлтый → красный по мере потери HP
     (this.hpfill.style as any).background = k > 0.5 ? '#33cc33' : k > 0.25 ? '#ddaa22' : '#cc2222';
     this.hptext.textContent = `${Math.ceil(me.hp)}`;
-    const roleRu = me.role === 'cop' ? 'Полицейский' : 'Гражданин';
+    const roleRu = t(me.role === 'cop' ? 'role.cop' : 'role.citizen');
     const w = me.weapon && Object.hasOwn(WEAPONS, me.weapon) ? WEAPONS[me.weapon as WeaponKind] : null;
     this.ammoBig.classList.toggle('hidden', !w?.ranged);
     if (w?.ranged) this.ammoBig.textContent = `▸ ${me.ammo}`;
     this.stats.textContent =
-      `Наличные: ${me.cash}$  |  Сейф: ${me.safe}$\n` +
-      `${roleRu}${me.apt ? `  |  Квартира: ${me.apt}` : ''}\n` +
-      `Оружие: ${w ? w.name : 'Кулаки'}`;
+      `${t('stats.cash')}: ${me.cash}$  |  ${t('stats.safe')}: ${me.safe}$\n` +
+      `${roleRu}${me.apt ? `  |  ${t('stats.apt')}: ${me.apt}` : ''}\n` +
+      `${t('stats.weapon')}: ${w ? t(`weapon.${me.weapon}`) : t('stats.fists')}`;
 
     // Баннеры: все активные строки сразу (например, розыск + груз одновременно)
     const lines: string[] = [];
     if (me.mode === 'jail') {
-      lines.push(`ТЮРЬМА: ${Math.max(0, Math.ceil((me.jailUntil - nowServer) / 1000))} сек`);
+      lines.push(`${t('banner.jail')}: ${Math.max(0, Math.ceil((me.jailUntil - nowServer) / 1000))}`);
     }
     if (me.wantedUntil > nowServer) {
-      lines.push(`В РОЗЫСКЕ: ${Math.ceil((me.wantedUntil - nowServer) / 1000)} сек`);
+      lines.push(`${t('banner.wanted')}: ${Math.ceil((me.wantedUntil - nowServer) / 1000)}`);
     }
     if (me.cargo) {
-      const target = TARGET_LABELS[me.deliveryTarget] ?? me.deliveryTarget;
-      lines.push(`Груз → ${target}: ${Math.max(0, Math.ceil((me.deliveryDeadline - nowServer) / 1000))} сек (+${deliveryReward(this.map, me.deliveryTarget)}$)`);
+      lines.push(t('banner.cargo', {
+        target: t(`target.${me.deliveryTarget}`),
+        sec: Math.max(0, Math.ceil((me.deliveryDeadline - nowServer) / 1000)),
+        reward: deliveryReward(this.map, me.deliveryTarget),
+      }));
     }
     this.banner.textContent = lines.join('\n');
     this.banner.classList.toggle('hidden', lines.length === 0);
@@ -197,7 +197,7 @@ export class UI {
     if (me.mode === 'dead') {
       if (!this.diedAt) this.diedAt = performance.now();
       const left = Math.max(0, Math.ceil((RESPAWN_DELAY_MS - (performance.now() - this.diedAt)) / 1000));
-      this.deathTimer.textContent = `Респаун через ${left}`;
+      this.deathTimer.textContent = t('death.timer', { sec: left });
       this.deathOverlay.classList.remove('hidden');
     } else {
       this.diedAt = 0;
@@ -227,24 +227,24 @@ export class UI {
   private computePrompt(me: any): string {
     if (me.mode === 'car') {
       if (!me.cargo && dist2(me.x, me.z, this.map.warehouse.x, this.map.warehouse.z) < DELIVERY_PICKUP_DIST ** 2) {
-        return 'E — взять груз';
+        return t('prompt.takeCargo');
       }
-      return 'E — выйти из машины';
+      return t('prompt.exitCar');
     }
     if (me.mode !== 'foot') return '';
 
     if (dist2(me.x, me.z, this.map.gunShop.x, this.map.gunShop.z) < DOOR_DIST * DOOR_DIST) {
-      return 'E — оружейный магазин';
+      return t('prompt.gunShop');
     }
 
     for (const [, apt] of (this.room.state.apartments as any)) {
       if (dist2(me.x, me.z, apt.doorX, apt.doorZ) < DOOR_DIST * DOOR_DIST) {
-        return apt.rentedBy === me.name ? 'E — сейф' : `E — аренда ${RENT_PRICE}$`;
+        return apt.rentedBy === me.name ? t('prompt.safe') : t('prompt.rent', { price: RENT_PRICE });
       }
     }
     for (const [, car] of (this.room.state.cars as any)) {
       if (!car.driverId && dist2(me.x, me.z, car.x, car.z) < CAR_ENTER_DIST * CAR_ENTER_DIST) {
-        return 'E — сесть в машину';
+        return t('prompt.enterCar');
       }
     }
     return '';

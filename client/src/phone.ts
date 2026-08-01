@@ -1,6 +1,7 @@
-import { SMS_HISTORY_COOLDOWN_MS, TARGET_LABELS, deliveryReward, type CityMap } from '@mmo/shared';
+import { SMS_HISTORY_COOLDOWN_MS, deliveryReward, type CityMap } from '@mmo/shared';
 import type { Room } from 'colyseus.js';
 import { isTypingTarget, type InputController } from './input.js';
+import { t } from './i18n/index.js';
 
 interface DialogRow { withNick: string; lastText: string; lastTs: number; unread: number }
 interface SmsItem { id: number; fromNick: string; text: string; ts: number }
@@ -78,23 +79,20 @@ export class Phone {
       this.room.send('smsRead', { with: this.threadWith });
     });
     room.onMessage('transferResult', (m: any) => {
-      this.toast(m.ok ? 'Переведено' : this.transferErrorText(m.error));
+      this.toast(m.ok ? t('toast.transferOk') : this.transferErrorText(m.error));
       if (m.ok) {
         (document.getElementById('transferTo') as HTMLInputElement).value = '';
         (document.getElementById('transferAmount') as HTMLInputElement).value = '';
         room.send('transferHistoryReq');
       }
     });
-    room.onMessage('transferIn', (m: any) => this.toast(`Перевод от ${m.from}: +${m.amount}$`));
+    room.onMessage('transferIn', (m: any) => this.toast(t('toast.transferIn', { from: m.from, amount: m.amount })));
     room.onMessage('transferHistory', (m: any) => this.renderTransfers(m.items));
     room.onMessage('leaderboard', (m: any) => this.renderTop(m.items));
     room.onMessage('jobResult', (m: any) => {
       if (m.ok) return;
-      const texts: Record<string, string> = {
-        need_car: 'Нужно быть в машине', no_job: 'Нет активного заказа',
-        job_cooldown: 'Новый заказ будет через 30 секунд',
-      };
-      this.toast(texts[m.error] ?? 'Ошибка заказа');
+      const key = `job.${m.error}`;
+      this.toast(t(key) === key ? t('job.error') : t(key)); // неизвестный код — общий fallback
     });
   }
 
@@ -131,19 +129,16 @@ export class Phone {
     const info = document.getElementById('jobInfo')!;
     const btn = document.getElementById('jobBtn')!;
     if (me.cargo) {
-      const target = TARGET_LABELS[me.deliveryTarget] ?? me.deliveryTarget;
       const left = Math.max(0, Math.ceil((me.deliveryDeadline - this.serverNow()) / 1000));
       const reward = deliveryReward(this.map, me.deliveryTarget);
-      info.textContent = `Заказ: груз → ${target}. Осталось ${left} сек. Награда ${reward}$. Сдача — доехать до точки на машине.`;
-      btn.textContent = 'Отказаться от заказа';
+      info.textContent = t('job.active', { target: t(`target.${me.deliveryTarget}`), sec: left, reward });
+      btn.textContent = t('job.drop');
     } else {
-      info.textContent = me.mode === 'car'
-        ? 'Заказа нет. Взять доставку можно прямо отсюда (машина у тебя).'
-        : 'Заказа нет. Для доставки нужна машина.';
-      btn.textContent = 'Взять заказ';
+      info.textContent = t(me.mode === 'car' ? 'job.noneCar' : 'job.noneFoot');
+      btn.textContent = t('job.take');
     }
     // банк
-    document.getElementById('bankBalance')!.textContent = `Наличные: ${me.cash}$`;
+    document.getElementById('bankBalance')!.textContent = t('bank.balance', { cash: me.cash });
   }
 
   private show(s: Screen): void {
@@ -191,7 +186,7 @@ export class Phone {
   private onSms(m: { id: number; from: string; to: string; text: string; ts: number }): void {
     const mine = m.from === this.meName();
     const other = mine ? m.to : m.from;
-    if (!mine) this.toast(`SMS от ${m.from}`);
+    if (!mine) this.toast(t('toast.smsFrom', { from: m.from }));
     if (!mine && !(this.isOpen && this.screen === 'appThread' && this.threadWith === m.from)) {
       this.unread++;
       this.renderBadge();
@@ -281,20 +276,12 @@ export class Phone {
   }
 
   private smsErrorText(error: string): string {
-    const texts: Record<string, string> = {
-      bad_to: 'Некорректный ник', self: 'Нельзя писать себе', bad_text: 'Пустое или длинное сообщение',
-      cooldown: 'Не так быстро', no_such_user: 'Нет такого игрока', muted: 'Вы замьючены',
-    };
-    return texts[error] ?? 'Ошибка SMS';
+    const key = `sms.${error}`;
+    return t(key) === key ? t('sms.error') : t(key); // t вернёт ключ при промахе — тогда общий fallback
   }
 
   private transferErrorText(error: string): string {
-    const texts: Record<string, string> = {
-      bad_amount: 'Сумма от 1 до 100000', self: 'Нельзя себе',
-      no_such_user: 'Нет такого игрока', no_money: 'Не хватает наличных',
-      need_playtime: 'Переводы доступны после 30 минут игры',
-      ip_limit: 'Дневной лимит переводов с вашего IP исчерпан',
-    };
-    return texts[error] ?? 'Ошибка перевода';
+    const key = `transfer.${error}`;
+    return t(key) === key ? t('transfer.error') : t(key);
   }
 }

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { connect } from './net.js';
 import { Avatars } from './avatars.js';
-import { InputController } from './input.js';
+import { InputController, isTypingTarget } from './input.js';
 import { Prediction } from './prediction.js';
 import { updateCamera } from './camera.js';
 import { UI } from './ui.js';
@@ -13,17 +13,24 @@ import { Fullmap } from './fullmap.js';
 import { Phone } from './phone.js';
 import { Feed } from './feed.js';
 import type { Room } from 'colyseus.js';
+import { t, setLang, getLang, applyStatic } from './i18n/index.js';
+
+// статика экрана входа — сразу на выбранном языке
+applyStatic();
 
 const joinScreen = document.getElementById('join')!;
 const nameInput = document.getElementById('nameInput') as HTMLInputElement;
 const joinError = document.getElementById('joinError')!;
+
+document.getElementById('langRu')!.addEventListener('click', () => { setLang('ru'); applyStatic(); });
+document.getElementById('langEn')!.addEventListener('click', () => { setLang('en'); applyStatic(); });
 
 let connecting = false;
 
 async function start(role: string): Promise<void> {
   const name = nameInput.value.trim();
   if (!name) {
-    joinError.textContent = 'Введи ник';
+    joinError.textContent = t('join.needName');
     return;
   }
   if (connecting) return;
@@ -35,12 +42,12 @@ async function start(role: string): Promise<void> {
     connecting = false;
     const msg = String(e?.message ?? '');
     joinError.textContent = msg.includes('bad_token')
-      ? 'Этот ник уже занят другим игроком'
+      ? t('join.badToken')
       : msg.includes('bad_version')
-      ? 'Обновите страницу (новая версия сервера)'
+      ? t('join.badVersion')
       : msg.includes('banned')
-      ? 'Аккаунт заблокирован'
-      : 'Сервер полон (100/100) или недоступен — попробуйте позже';
+      ? t('join.banned')
+      : t('join.full');
     return;
   }
   joinScreen.style.display = 'none';
@@ -75,16 +82,22 @@ function bootGame(room: Room): void {
   const mapRenderer = new CityMapRenderer(map);
   const fullmap = new Fullmap(mapRenderer, input);
   const phone = new Phone(room, map, input, (t) => ui.showToast(t), () => avatars.serverNow());
-  room.onMessage('notice', (m: { text?: string }) => { if (m?.text) ui.showToast(String(m.text)); }); // мут и прочие серверные уведомления
+  room.onMessage('notice', (m: { code?: string; until?: number; text?: string }) => {
+    if (m?.code === 'muted' && m.until) {
+      const locale = getLang() === 'ru' ? 'ru-RU' : 'en-US';
+      ui.showToast(t('notice.muted', { time: new Date(m.until).toLocaleTimeString(locale) }));
+    } else if (m?.text) ui.showToast(String(m.text)); // переходный формат до Task 15
+  });
   const feed = new Feed();
   feed.bind(room);
   room.onMessage('delivered', (m: { reward: number }) => {
-    ui.showToast(`+${m.reward}$`); // Task 14 заменит на t()
+    ui.showToast(`+${m.reward}$`); // сумма числом — универсально для обоих языков
     effects.cashIn();
   });
   // effects создан раньше — его keydown переключает mute первым, здесь читаем уже новое значение
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyN' && !e.repeat) ui.showToast(effects.muted ? 'Звук выключен' : 'Звук включён'); // Task 14 → t()
+    if (isTypingTarget()) return; // не срабатываем при печати в чате/полях
+    if (e.code === 'KeyN' && !e.repeat) ui.showToast(t(effects.muted ? 'sound.off' : 'sound.on'));
   });
   phone.onOpen = () => fullmap.close();
   fullmap.onOpen = () => phone.close();
@@ -121,8 +134,9 @@ function bootGame(room: Room): void {
         else markers.push({ x: car.x, z: car.z, kind: 'car' });
       }
       if (me.cargo) {
-        const t = map.deliveryTargets.find(t => t.id === me.deliveryTarget);
-        if (t) markers.push({ x: t.x, z: t.z, kind: 'target' });
+        // переменная названа target, а не t: t — это импорт i18n
+        const target = map.deliveryTargets.find(dt => dt.id === me.deliveryTarget);
+        if (target) markers.push({ x: target.x, z: target.z, kind: 'target' });
       }
       const selfView = {
         x: avatars.selfPos?.x ?? me.x,

@@ -1,7 +1,8 @@
 import {
   MAP_HALF, ROADS, ROAD_WIDTH, MINIMAP_SIZE, MINIMAP_RADIUS,
-  TARGET_LABELS, type CityMap,
+  type CityMap,
 } from '@mmo/shared';
+import { t } from './i18n/index.js';
 
 export interface MapMarker { x: number; z: number; kind: 'car' | 'target' }
 export interface Poi { x: number; z: number; label: string }
@@ -33,11 +34,11 @@ export class CityMapRenderer {
       ctx.fillRect(b.x - b.w / 2 + MAP_HALF, b.z - b.d / 2 + MAP_HALF, b.w, b.d);
     }
     this.pois = [
-      { x: map.hospitalDoor.x, z: map.hospitalDoor.z, label: 'Больница' },
-      { x: map.policeDoor.x, z: map.policeDoor.z, label: 'Полиция' },
-      { x: map.warehouse.x, z: map.warehouse.z, label: 'Склад' },
-      { x: map.gunShop.x, z: map.gunShop.z, label: 'Оружейный' },
-      ...map.deliveryTargets.map(t => ({ x: t.x, z: t.z, label: TARGET_LABELS[t.id] ?? t.id })),
+      { x: map.hospitalDoor.x, z: map.hospitalDoor.z, label: t('world.hospital') },
+      { x: map.policeDoor.x, z: map.policeDoor.z, label: t('world.police') },
+      { x: map.warehouse.x, z: map.warehouse.z, label: t('world.warehouse') },
+      { x: map.gunShop.x, z: map.gunShop.z, label: t('world.gunshop') },
+      ...map.deliveryTargets.map(t0 => ({ x: t0.x, z: t0.z, label: t(`target.${t0.id}`) })),
     ];
   }
 

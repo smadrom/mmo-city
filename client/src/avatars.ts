@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WEAPONS, MAX_HP, type WeaponKind } from '@mmo/shared';
 import { getStateCallbacks, type Room } from 'colyseus.js';
+import { t } from './i18n/index.js';
 
 interface PlayerMesh {
   group: THREE.Group;
@@ -62,7 +63,7 @@ function makeNameLabel(name: string, role: string): THREE.Sprite {
   const ctx = canvas.getContext('2d')!;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const roleRu = role === 'cop' ? 'Полицейский' : role === 'zombie' ? 'Зомби' : 'Гражданин';
+  const roleRu = role === 'cop' ? t('role.cop') : role === 'zombie' ? t('role.zombie') : t('role.citizen');
   ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
   ctx.fillRect(3, 6, 250, 84);
   ctx.font = 'bold 32px sans-serif';
@@ -202,7 +203,7 @@ export class Avatars {
     const $ = getStateCallbacks(room);
 
     $(room.state).players.onAdd((p: any, id: string) => {
-      const mesh = makePlayerMesh(p.name ?? 'игрок', p.role ?? 'citizen');
+      const mesh = makePlayerMesh(p.name ?? t('player.unknown'), p.role ?? 'citizen');
       mesh.group.position.set(p.x, 0, p.z); // сразу на месте, без «прилёта» из (0,0,0)
       mesh.group.rotation.y = p.rotY;
       this.players.set(id, mesh);

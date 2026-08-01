@@ -1,11 +1,13 @@
 import * as THREE from 'three';
-import { createCityMap, ROADS, ROAD_WIDTH, MAP_HALF, TARGET_LABELS, type CityMap, type Point, type BuildingDef } from '@mmo/shared';
+import { createCityMap, ROADS, ROAD_WIDTH, MAP_HALF, type CityMap, type Point, type BuildingDef } from '@mmo/shared';
+import { t } from './i18n/index.js';
 
+// значения через t() при импорте модуля — язык выбирается на экране входа, до buildWorld
 const KIND_LABELS: Record<BuildingDef['kind'], string> = {
-  hospital: 'Больница',
-  police: 'Полиция',
-  warehouse: 'Склад',
-  house: 'Жилой дом',
+  hospital: t('world.hospital'),
+  police: t('world.police'),
+  warehouse: t('world.warehouse'),
+  house: t('world.house'),
 };
 
 function makeTextSprite(text: string): THREE.Sprite {
@@ -131,8 +133,8 @@ export function buildWorld(scene: THREE.Scene): CityMap {
     label.position.set(p.x, 6, p.z);
     scene.add(label);
   };
-  poi(map.gunShop, 'Оружейный магазин');
-  for (const t of map.deliveryTargets) poi(t, TARGET_LABELS[t.id] ?? t.id);
+  poi(map.gunShop, t('world.gunshop'));
+  for (const t0 of map.deliveryTargets) poi(t0, t(`target.${t0.id}`));
 
   // забор вокруг безопасных зон, ворота — южная грань (к дороге)
   const fenceMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
@@ -154,7 +156,7 @@ export function buildWorld(scene: THREE.Scene): CityMap {
       seg(minX, zz, 0.15, 2);
       seg(maxX, zz, 0.15, 2);
     }
-    const zoneLabel = makeTextSprite('Безопасная зона');
+    const zoneLabel = makeTextSprite(t('world.safezone'));
     zoneLabel.position.set(z.x, 4, z.z);
     scene.add(zoneLabel);
   }
@@ -168,7 +170,7 @@ export function buildWorld(scene: THREE.Scene): CityMap {
   yard.rotation.x = -Math.PI / 2;
   yard.position.set(grave.x, 0.04, grave.z);
   scene.add(yard);
-  const graveLabel = makeTextSprite('Кладбище');
+  const graveLabel = makeTextSprite(t('world.graveyard'));
   graveLabel.position.set(grave.x, 5, grave.z);
   scene.add(graveLabel);
 

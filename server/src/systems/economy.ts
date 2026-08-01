@@ -1,10 +1,12 @@
 import {
   deliveryReward, DELIVERY_TIME_MS, DELIVERY_PICKUP_DIST, DELIVERY_DROP_DIST,
   TRANSFER_MIN, TRANSFER_MAX, TRANSFER_MIN_PLAYTIME_SEC, TRANSFER_IP_DAILY_LIMIT,
+  JOB_RETRY_COOLDOWN_MS,
   dist2, type CityMap,
 } from '@mmo/shared';
 import type { GameState, Player } from '../schema/GameState.js';
 import type { GameDB } from '../db.js';
+import type { Runtime } from '../runtime.js';
 
 export function canTakeDelivery(p: Player): boolean {
   return p.mode === 'car' && !p.cargo;
@@ -22,36 +24,44 @@ export function tryStartDelivery(
   playerId: string,
   map: CityMap,
   now: number,
+  rt: Runtime,
 ): boolean {
   const p = state.players.get(playerId);
   if (!p || !canTakeDelivery(p)) return false;
+  if (now < rt.nextJobAt) return false; // кулдаун после отказа/просрочки
   if (dist2(p.x, p.z, map.warehouse.x, map.warehouse.z) > DELIVERY_PICKUP_DIST * DELIVERY_PICKUP_DIST) return false;
   assignDelivery(p, map, now);
   return true;
 }
 
+export type TakeJobResult = 'ok' | 'need_car' | 'job_cooldown';
+
 // телефон: тот же заказ, но без поездки на склад (машина всё равно обязательна)
-export function tryTakeJob(state: GameState, playerId: string, map: CityMap, now: number): boolean {
+export function tryTakeJob(state: GameState, playerId: string, map: CityMap, now: number, rt: Runtime): TakeJobResult {
   const p = state.players.get(playerId);
-  if (!p || !canTakeDelivery(p)) return false;
+  if (!p || !canTakeDelivery(p)) return 'need_car';
+  if (now < rt.nextJobAt) return 'job_cooldown';
   assignDelivery(p, map, now);
-  return true;
+  return 'ok';
 }
 
-export function tryDropJob(state: GameState, playerId: string): boolean {
+export function tryDropJob(state: GameState, playerId: string, rt: Runtime, now: number): boolean {
   const p = state.players.get(playerId);
   if (!p || !p.cargo) return false;
   p.cargo = false;
   p.deliveryTarget = '';
+  rt.nextJobAt = now + JOB_RETRY_COOLDOWN_MS; // ре-ролл заказов — с паузой
   return true;
 }
 
-export function tickDelivery(state: GameState, map: CityMap, now: number): void {
-  state.players.forEach((p) => {
+export function tickDelivery(state: GameState, map: CityMap, now: number, runtimes: Map<string, Runtime>): void {
+  state.players.forEach((p, id) => {
     if (!p.cargo) return;
     if (now > p.deliveryDeadline) {
       p.cargo = false;
       p.deliveryTarget = '';
+      const rt = runtimes.get(id);
+      if (rt) rt.nextJobAt = now + JOB_RETRY_COOLDOWN_MS; // просрочил — пауза на новый заказ
       return;
     }
     if (p.mode !== 'car') return; // сдавать груз можно только из машины

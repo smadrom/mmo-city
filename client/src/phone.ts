@@ -88,7 +88,12 @@ export class Phone {
     room.onMessage('transferIn', (m: any) => this.toast(`Перевод от ${m.from}: +${m.amount}$`));
     room.onMessage('transferHistory', (m: any) => this.renderTransfers(m.items));
     room.onMessage('jobResult', (m: any) => {
-      if (!m.ok) this.toast(m.error === 'need_car' ? 'Нужно быть в машине' : 'Нет активного заказа');
+      if (m.ok) return;
+      const texts: Record<string, string> = {
+        need_car: 'Нужно быть в машине', no_job: 'Нет активного заказа',
+        job_cooldown: 'Новый заказ будет через 30 секунд',
+      };
+      this.toast(texts[m.error] ?? 'Ошибка заказа');
     });
   }
 

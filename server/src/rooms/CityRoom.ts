@@ -188,11 +188,15 @@ export class CityRoom extends Room<GameState> {
       client.send('transferHistory', { items: this.db.getTransfers(p.name, TRANSFER_HISTORY) });
     });
     this.onMessage('jobTake', (client) => {
-      const ok = tryTakeJob(this.state, client.sessionId, this.map, Date.now());
-      client.send('jobResult', { ok, error: ok ? undefined : 'need_car' });
+      const rt = this.runtimes.get(client.sessionId);
+      if (!rt) return;
+      const res = tryTakeJob(this.state, client.sessionId, this.map, Date.now(), rt);
+      client.send('jobResult', { ok: res === 'ok', error: res === 'ok' ? undefined : res });
     });
     this.onMessage('jobDrop', (client) => {
-      const ok = tryDropJob(this.state, client.sessionId);
+      const rt = this.runtimes.get(client.sessionId);
+      if (!rt) return;
+      const ok = tryDropJob(this.state, client.sessionId, rt, Date.now());
       client.send('jobResult', { ok, error: ok ? undefined : 'no_job' });
     });
   }
@@ -385,7 +389,8 @@ export class CityRoom extends Room<GameState> {
     if (!p) return;
     if (p.mode === 'car') {
       if (!p.cargo && dist2(p.x, p.z, this.map.warehouse.x, this.map.warehouse.z) < DELIVERY_PICKUP_DIST * DELIVERY_PICKUP_DIST) {
-        tryStartDelivery(this.state, client.sessionId, this.map, Date.now());
+        const rt = this.runtimes.get(client.sessionId);
+        if (rt) tryStartDelivery(this.state, client.sessionId, this.map, Date.now(), rt);
         return;
       }
       tryExitCar(this.state, client.sessionId, this.colliders);
@@ -421,7 +426,7 @@ export class CityRoom extends Room<GameState> {
     tickPickups(this.state, this.pickupRuntime, now);
     tickRespawn(this.state, this.runtimes, this.map, now);
     tickPolice(this.state, this.runtimes, now, dt, this.map);
-    tickDelivery(this.state, this.map, now);
+    tickDelivery(this.state, this.map, now, this.runtimes);
     tickRent(this.state, this.runtimes, now);
     if (now - this.lastPlaytimeAt > 60_000) { // наигрыш для порога переводов (антимультиаккаунт)
       this.runtimes.forEach((rt) => { rt.playtimeSec += 60; });

@@ -53,6 +53,7 @@ export const DELIVERY_REWARD_PER_M = 0.4; // + за метр от склада �
 export const DELIVERY_TIME_MS = 3 * 60_000;
 export const DELIVERY_PICKUP_DIST = 6;
 export const DELIVERY_DROP_DIST = 6;
+export const JOB_RETRY_COOLDOWN_MS = 30_000; // пауза на новый заказ после отказа/просрочки
 
 export const RENT_PRICE = 100;
 export const RENT_INTERVAL_MS = 60 * 60_000;

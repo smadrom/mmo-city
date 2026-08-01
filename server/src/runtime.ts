@@ -31,6 +31,7 @@ export interface Runtime {
   nextWanderAt: number; // зомби: когда переслучить направление блуждания
   wanderRotY: number;
   frozen: boolean;      // обрыв: призрак не симулируется/не эксплуатируется в окне реконнекта
+  nextJobAt: number; // кулдаун заказа доставки (отказ/просрочка)
   ip: string;           // IP из onAuth (X-Forwarded-For за nginx) — для антифарм-лимита и банов
   playtimeSec: number;  // наигрыш, персистится в players.playtime_sec
   chatViolations: number[]; // ts срабатываний чат-кулдауна (автомут, Task 6)
@@ -59,6 +60,7 @@ export function makeRuntime(now: number): Runtime {
     nextWanderAt: 0,
     wanderRotY: 0,
     frozen: false,
+    nextJobAt: 0,
     ip: '',
     playtimeSec: 0,
     chatViolations: [],

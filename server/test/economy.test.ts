@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { GameState, Player, Car } from '../src/schema/GameState.js';
 import { tryStartDelivery, tickDelivery, tryTransfer, tryTakeJob, tryDropJob } from '../src/systems/economy.js';
-import { deliveryReward, DELIVERY_TIME_MS, createCityMap, START_CASH, TRANSFER_MAX } from '@mmo/shared';
+import { deliveryReward, DELIVERY_TIME_MS, JOB_RETRY_COOLDOWN_MS, createCityMap, START_CASH, TRANSFER_MAX } from '@mmo/shared';
+import { makeRuntime } from '../src/runtime.js';
 import { GameDB } from '../src/db.js';
 
 const map = createCityMap();
@@ -21,37 +22,39 @@ function setup() {
   car.x = p.x; car.z = p.z;
   car.driverId = 's1';
   state.cars.set('car0', car);
-  return { state, p, car };
+  const rt = makeRuntime(0);
+  const runtimes = new Map([['s1', rt]]);
+  return { state, p, car, rt, runtimes };
 }
 
 describe('доставка', () => {
   it('взятие груза на складе в машине', () => {
-    const { state, p } = setup();
-    expect(tryStartDelivery(state, 's1', map, 1000)).toBe(true);
+    const { state, p, rt } = setup();
+    expect(tryStartDelivery(state, 's1', map, 1000, rt)).toBe(true);
     expect(p.cargo).toBe(true);
     expect(map.deliveryTargets.map(t => t.id)).toContain(p.deliveryTarget);
     expect(p.deliveryDeadline).toBe(1000 + DELIVERY_TIME_MS);
   });
 
   it('нельзя взять груз пешком', () => {
-    const { state, p } = setup();
+    const { state, p, rt } = setup();
     p.mode = 'foot';
-    expect(tryStartDelivery(state, 's1', map, 1000)).toBe(false);
+    expect(tryStartDelivery(state, 's1', map, 1000, rt)).toBe(false);
   });
 
   it('нельзя взять груз вдали от склада', () => {
-    const { state, p } = setup();
+    const { state, p, rt } = setup();
     p.x = 0; p.z = 0;
-    expect(tryStartDelivery(state, 's1', map, 1000)).toBe(false);
+    expect(tryStartDelivery(state, 's1', map, 1000, rt)).toBe(false);
   });
 
   it('доставка в точку: награда от дистанции, груз снят', () => {
-    const { state, p } = setup();
-    tryStartDelivery(state, 's1', map, 1000);
+    const { state, p, rt, runtimes } = setup();
+    tryStartDelivery(state, 's1', map, 1000, rt);
     const target = map.deliveryTargets.find(t => t.id === p.deliveryTarget)!;
     const expected = deliveryReward(map, target.id);
     p.x = target.x; p.z = target.z;
-    tickDelivery(state, map, 2000);
+    tickDelivery(state, map, 2000, runtimes);
     expect(p.cargo).toBe(false);
     expect(p.cash).toBe(expected);
     expect(p.deliveryTarget).toBe('');
@@ -64,20 +67,20 @@ describe('доставка', () => {
   });
 
   it('пешком груз не сдаётся — только из машины', () => {
-    const { state, p } = setup();
-    tryStartDelivery(state, 's1', map, 1000);
+    const { state, p, rt, runtimes } = setup();
+    tryStartDelivery(state, 's1', map, 1000, rt);
     const target = map.deliveryTargets.find(t => t.id === p.deliveryTarget)!;
     p.x = target.x; p.z = target.z;
     p.mode = 'foot';
-    tickDelivery(state, map, 2000);
+    tickDelivery(state, map, 2000, runtimes);
     expect(p.cargo).toBe(true);
     expect(p.cash).toBe(0);
   });
 
   it('таймаут: груз пропадает без награды', () => {
-    const { state, p } = setup();
-    tryStartDelivery(state, 's1', map, 1000);
-    tickDelivery(state, map, 1000 + DELIVERY_TIME_MS + 1);
+    const { state, p, rt, runtimes } = setup();
+    tryStartDelivery(state, 's1', map, 1000, rt);
+    tickDelivery(state, map, 1000 + DELIVERY_TIME_MS + 1, runtimes);
     expect(p.cargo).toBe(false);
     expect(p.cash).toBe(0);
   });
@@ -154,41 +157,70 @@ describe('удалённый заказ (телефон)', () => {
     p.carId = 'car0';
     state.players.set('s1', p);
     const map = createCityMap();
-    return { state, p, map };
+    const rt = makeRuntime(0);
+    const runtimes = new Map([['s1', rt]]);
+    return { state, p, map, rt, runtimes };
   }
 
   it('tryTakeJob: в машине без груза — заказ назначен, склад не нужен', () => {
-    const { state, p, map } = setupJob();
+    const { state, p, map, rt } = setupJob();
     p.x = 0; p.z = 0; // далеко от склада (-150, 127)
-    expect(tryTakeJob(state, 's1', map, 10_000)).toBe(true);
+    expect(tryTakeJob(state, 's1', map, 10_000, rt)).toBe('ok');
     expect(p.cargo).toBe(true);
     expect(p.deliveryTarget).not.toBe('');
     expect(p.deliveryDeadline).toBe(10_000 + DELIVERY_TIME_MS);
   });
 
   it('tryTakeJob: пешком или с грузом — отказ', () => {
-    const { state, p, map } = setupJob();
+    const { state, p, map, rt } = setupJob();
     p.mode = 'foot';
-    expect(tryTakeJob(state, 's1', map, 1000)).toBe(false);
+    expect(tryTakeJob(state, 's1', map, 1000, rt)).toBe('need_car');
     p.mode = 'car';
     p.cargo = true;
-    expect(tryTakeJob(state, 's1', map, 1000)).toBe(false);
+    expect(tryTakeJob(state, 's1', map, 1000, rt)).toBe('need_car');
   });
 
-  it('tryDropJob: снимает заказ; без заказа — false', () => {
-    const { state, p, map } = setupJob();
-    expect(tryDropJob(state, 's1')).toBe(false);
-    tryTakeJob(state, 's1', map, 1000);
-    expect(tryDropJob(state, 's1')).toBe(true);
+  it('tryDropJob: снимает заказ и вешает кулдаун; без заказа — false', () => {
+    const { state, p, map, rt } = setupJob();
+    expect(tryDropJob(state, 's1', rt, 2000)).toBe(false);
+    expect(tryTakeJob(state, 's1', map, 1000, rt)).toBe('ok');
+    expect(tryDropJob(state, 's1', rt, 2000)).toBe(true);
     expect(p.cargo).toBe(false);
-    expect(p.deliveryTarget).toBe('');
+    expect(rt.nextJobAt).toBe(2000 + JOB_RETRY_COOLDOWN_MS);
+    expect(tryTakeJob(state, 's1', map, 2001, rt)).toBe('job_cooldown'); // кулдаун после отказа
+    expect(tryTakeJob(state, 's1', map, 2000 + JOB_RETRY_COOLDOWN_MS, rt)).toBe('ok');
+  });
+
+  it('кулдаун не ставится при успешной сдаче', () => {
+    const { state, p, map, rt, runtimes } = setupJob();
+    tryTakeJob(state, 's1', map, 1000, rt);
+    const target = map.deliveryTargets.find(t => t.id === p.deliveryTarget)!;
+    p.x = target.x; p.z = target.z;
+    tickDelivery(state, map, 2000, runtimes);
+    expect(p.cargo).toBe(false);
+    expect(rt.nextJobAt).toBe(0);
+  });
+
+  it('просрочка заказа вешает кулдаун', () => {
+    const { state, p, map, rt, runtimes } = setupJob();
+    tryTakeJob(state, 's1', map, 1000, rt);
+    tickDelivery(state, map, 1000 + DELIVERY_TIME_MS + 1, runtimes);
+    expect(p.cargo).toBe(false);
+    expect(rt.nextJobAt).toBe(1000 + DELIVERY_TIME_MS + 1 + JOB_RETRY_COOLDOWN_MS);
+  });
+
+  it('складской tryStartDelivery молча уважает кулдаун', () => {
+    const { state, p, rt } = setup();
+    rt.nextJobAt = 5000;
+    expect(tryStartDelivery(state, 's1', map, 1000, rt)).toBe(false);
+    expect(tryStartDelivery(state, 's1', map, 5000, rt)).toBe(true);
   });
 
   it('складской tryStartDelivery по-прежнему требует склад', () => {
-    const { state, p, map } = setupJob();
+    const { state, p, map, rt } = setupJob();
     p.x = 0; p.z = 0;
-    expect(tryStartDelivery(state, 's1', map, 1000)).toBe(false);
+    expect(tryStartDelivery(state, 's1', map, 1000, rt)).toBe(false);
     p.x = map.warehouse.x; p.z = map.warehouse.z;
-    expect(tryStartDelivery(state, 's1', map, 1000)).toBe(true);
+    expect(tryStartDelivery(state, 's1', map, 1000, rt)).toBe(true);
   });
 });

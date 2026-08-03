@@ -1,6 +1,7 @@
 import {
   MAP_HALF, PLAYER_RADIUS, PLAYER_SPEED, PLAYER_SPRINT,
   CAR_MAX_SPEED, CAR_REVERSE_SPEED, CAR_ACCEL, CAR_BRAKE, CAR_DRAG, CAR_TURN_RATE, CAR_RADIUS,
+  CAR_NITRO_SPEED_MULT, CAR_NITRO_ACCEL_MULT, CAR_CRASH_BOUNCE,
 } from './config.js';
 
 export interface AABB { x: number; z: number; w: number; d: number; }
@@ -74,11 +75,14 @@ export interface CarStepState { x: number; z: number; rotY: number; speed: numbe
 export function stepCar(
   s: CarStepState, inp: MoveInput, dt: number, colliders: AABB[], safeZones: AABB[] = [],
 ): { steer: number } {
-  if (inp.up) s.speed = Math.min(CAR_MAX_SPEED, s.speed + CAR_ACCEL * dt);
+  const nitro = inp.sprint;
+  const maxSpeed = nitro ? CAR_MAX_SPEED * CAR_NITRO_SPEED_MULT : CAR_MAX_SPEED;
+  const accel = nitro ? CAR_ACCEL * CAR_NITRO_ACCEL_MULT : CAR_ACCEL;
+  if (inp.up) s.speed = Math.min(maxSpeed, s.speed + accel * dt);
   else if (inp.down) {
     s.speed = s.speed > 0
       ? Math.max(0, s.speed - CAR_BRAKE * dt)
-      : Math.max(-CAR_REVERSE_SPEED, s.speed - CAR_ACCEL * dt);
+      : Math.max(-CAR_REVERSE_SPEED, s.speed - accel * dt);
   } else if (s.speed > 0) s.speed = Math.max(0, s.speed - CAR_DRAG * dt);
   else if (s.speed < 0) s.speed = Math.min(0, s.speed + CAR_DRAG * dt);
 
@@ -91,7 +95,7 @@ export function stepCar(
     const nx = clamp(s.x - Math.sin(s.rotY) * s.speed * dt, -MAP_HALF + CAR_RADIUS, MAP_HALF - CAR_RADIUS);
     const nz = clamp(s.z - Math.cos(s.rotY) * s.speed * dt, -MAP_HALF + CAR_RADIUS, MAP_HALF - CAR_RADIUS);
     if (collidesAny(nx, nz, CAR_RADIUS, colliders)) {
-      s.speed = 0;
+      s.speed = -s.speed * CAR_CRASH_BOUNCE; // отскок, не гвозди
     } else if (inAnyAABB(nx, nz, safeZones)) {
       // граница безопасной зоны разворачивает (как в GTA SA)
       s.speed = 0;

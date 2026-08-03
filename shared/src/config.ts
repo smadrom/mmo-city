@@ -8,7 +8,10 @@ export const PLAYER_SPEED = 5;
 export const PLAYER_SPRINT = 8;
 
 export const CAR_RADIUS = 1.5;
-export const CAR_MAX_SPEED = 20;
+export const CAR_MAX_SPEED = 26;
+export const CAR_NITRO_SPEED_MULT = 1.5; // Shift в машине — нитро
+export const CAR_NITRO_ACCEL_MULT = 1.3;
+export const CAR_CRASH_BOUNCE = 0.25; // отскок при столкновении: speed = -speed × это
 export const CAR_REVERSE_SPEED = 6;
 export const CAR_ACCEL = 12;
 export const CAR_BRAKE = 25;

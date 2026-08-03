@@ -3,6 +3,7 @@ import { collidesCircleAABB, moveCircle, clamp, dist2, segmentHitsAABB, segmentA
 import {
   PLAYER_SPEED, PLAYER_SPRINT, PLAYER_RADIUS, MAP_HALF,
   CAR_MAX_SPEED, CAR_ACCEL, CAR_BRAKE, CAR_DRAG, CAR_RADIUS,
+  CAR_NITRO_SPEED_MULT, CAR_NITRO_ACCEL_MULT, CAR_CRASH_BOUNCE,
 } from '../src/config.js';
 
 const wall = { x: 10, z: 0, w: 2, d: 10 }; // стена x: 9..11, z: -5..5
@@ -176,12 +177,21 @@ describe('stepCar', () => {
     expect(s.rotY).toBeGreaterThan(rot0);
   });
 
-  it('столкновение со стеной обнуляет скорость, позиция не меняется', () => {
+  it('нитро (Shift): разгон быстрее и предел выше — до 39', () => {
+    const s = fresh();
+    stepCar(s, { ...noKeys, up: true, sprint: true }, dt, []);
+    expect(s.speed).toBeCloseTo(CAR_ACCEL * CAR_NITRO_ACCEL_MULT * dt, 10);
+    for (let i = 0; i < 200; i++) stepCar(s, { ...noKeys, up: true, sprint: true }, dt, []);
+    expect(s.speed).toBe(CAR_MAX_SPEED * CAR_NITRO_SPEED_MULT); // 39 — выше обычной максималки
+  });
+
+  it('столкновение со стеной отбрасывает: speed = -speed × CAR_CRASH_BOUNCE, позиция не меняется', () => {
     const s = fresh();
     const carWall = { x: 0, z: -10, w: 20, d: 2 }; // z: -11..-9
     s.x = 0; s.z = -7.8; s.speed = 10; // едет в -z, целевая -8.3 — круг достаёт стену
     stepCar(s, noKeys, dt, [carWall]);
-    expect(s.speed).toBe(0);
+    // без газа драг тикает раньше столкновения: (10 − драг) × отскок
+    expect(s.speed).toBeCloseTo(-(10 - CAR_DRAG * dt) * CAR_CRASH_BOUNCE, 10);
     expect(s.z).toBe(-7.8);
   });
 

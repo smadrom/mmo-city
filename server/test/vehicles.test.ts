@@ -55,14 +55,18 @@ describe('машины', () => {
     expect(p.z).toBe(car.z);
   });
 
-  it('столкновение со зданием останавливает машину', () => {
+  it('столкновение со зданием отбрасывает машину, стена не проходится', () => {
     const { state, car, runtimes, carRuntime, spots } = setup();
     tryEnterCar(state, 's1');
     const wall = { x: 5, z: -10, w: 20, d: 2 };
     runtimes.get('s1')!.input.up = true;
-    for (let i = 0; i < 200; i++) tickVehicles(state, runtimes, carRuntime, [wall], 0.05, i * 50, spots);
+    let bounced = false;
+    for (let i = 0; i < 200; i++) {
+      tickVehicles(state, runtimes, carRuntime, [wall], 0.05, i * 50, spots);
+      if (car.speed < 0) bounced = true; // отскок: после удара скорость ушла в минус
+    }
     expect(car.z).toBeGreaterThan(-10);
-    expect(car.speed).toBe(0);
+    expect(bounced).toBe(true);
   });
 
   it('задний ход: скорость отрицательная, упирается в -CAR_REVERSE_SPEED, машина едет назад', () => {

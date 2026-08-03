@@ -7,9 +7,10 @@
 
 - DNS уже настроен: `mmo.expw.net → 77.42.4.230` ✓
 - Локальный `ssh root@77.42.4.230` с этой машины — `deploy.sh` ходит по ssh.
-- **Docker** на VPS (один раз):
+- **Docker** на VPS (один раз, официальный скрипт — ставит docker-ce + compose-плагин v2):
   ```bash
-  ssh root@77.42.4.230 'apt update && apt install -y docker.io docker-compose-v2 && systemctl enable --now docker'
+  ssh root@77.42.4.230 'curl -fsSL https://get.docker.com | sh'
+  ssh root@77.42.4.230 'docker compose version'  # проверка: Docker Compose v2.x
   ```
 
 ## 1. Остановить старый билд и забэкапить БД (один раз)

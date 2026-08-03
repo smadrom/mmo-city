@@ -7,12 +7,16 @@ function serverUrl(): string {
     ?? (location.protocol === 'https:' ? `wss://${location.host}` : `ws://${location.hostname}:2567`);
 }
 
-export async function connect(name: string, role: string): Promise<Room> {
+export async function connect(name: string, role: string, email?: string, password?: string): Promise<Room> {
   const client = new Client(serverUrl());
   const token = localStorage.getItem(`tok:${name}`) ?? ''; // клейм ника из прошлого входа
-  const room = await client.join('city', { name, role, token, ver: PROTOCOL_VERSION }); // join-only: комнату создаёт сервер
-  room.onMessage('authToken', (m: { token: string }) => {
-    if (m?.token) localStorage.setItem(`tok:${name}`, m.token);
+  const options: Record<string, unknown> = { name, role, token, ver: PROTOCOL_VERSION };
+  if (email) options.email = email; // непустые — сервер сам решит: вход по почте или новая привязка
+  if (password) options.password = password;
+  const room = await client.join('city', options); // join-only: комнату создаёт сервер
+  room.onMessage('authToken', (m: { token: string; name?: string }) => {
+    // m.name — ник, резолвнутый сервером (при входе по email может отличаться от введённого)
+    if (m?.token) localStorage.setItem(`tok:${m.name ?? name}`, m.token);
   });
   return room;
 }

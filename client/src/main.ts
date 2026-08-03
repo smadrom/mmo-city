@@ -22,6 +22,8 @@ applyStatic(); // статика экрана входа — сразу на я�
 
 const joinScreen = document.getElementById('join')!;
 const nameInput = document.getElementById('nameInput') as HTMLInputElement;
+const emailInput = document.getElementById('emailInput') as HTMLInputElement;
+const passInput = document.getElementById('passInput') as HTMLInputElement;
 const joinError = document.getElementById('joinError')!;
 
 document.getElementById('langRu')!.addEventListener('click', () => { setLang('ru'); applyStatic(); });
@@ -31,7 +33,9 @@ let connecting = false;
 
 async function start(role: string): Promise<void> {
   const name = nameInput.value.trim();
-  if (!name) {
+  const email = emailInput.value.trim();
+  const password = passInput.value; // без trim: пробелы в пароле значимы
+  if (!name && !email) { // вход по email ник не требует — сервер резолвит его из привязки
     joinError.textContent = t('join.needName');
     return;
   }
@@ -39,12 +43,16 @@ async function start(role: string): Promise<void> {
   connecting = true;
   let room: Room;
   try {
-    room = await connect(name, role);
+    room = await connect(name, role, email, password);
   } catch (e: any) {
     connecting = false;
     const msg = String(e?.message ?? '');
     joinError.textContent = msg.includes('bad_token')
       ? t('join.badToken')
+      : msg.includes('bad_password')
+      ? t('join.badPassword')
+      : msg.includes('weak_password')
+      ? t('join.weakPassword')
       : msg.includes('bad_version')
       ? t('join.badVersion')
       : msg.includes('banned')

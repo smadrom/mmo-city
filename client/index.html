@@ -10,6 +10,8 @@
   <div id="join">
     <h1>MMO City</h1>
     <input id="nameInput" maxlength="16" data-i18n-ph="join.nickPh" />
+    <input id="emailInput" type="email" maxlength="64" data-i18n-ph="join.emailPh" />
+    <input id="passInput" type="password" data-i18n-ph="join.passPh" />
     <div class="roles">
       <button id="joinCitizen" data-i18n="join.citizen"></button>
       <button id="joinCop" data-i18n="join.cop"></button>
@@ -118,6 +120,7 @@
             <option value="low" data-i18n="settings.qualityLow"></option>
           </select>
         </div>
+        <button id="setLogout" data-i18n="settings.logout"></button>
         <button id="settingsClose" data-i18n="dialog.close"></button>
       </div>
     </div>

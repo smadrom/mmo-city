@@ -9,6 +9,7 @@ import {
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
 import { makeRuntime, type Runtime } from '../runtime.js';
 import { GameDB } from '../db.js';
+import { hashPassword, verifyPassword } from '../auth.js';
 import { registerRoom, clearRoom } from '../admin/registry.js';
 import { tickMovement } from '../systems/movement.js';
 import { tickVehicles, tryEnterCar, tryExitCar, type CarRuntime } from '../systems/vehicles.js';
@@ -211,10 +212,28 @@ export class CityRoom extends Room<GameState> {
     });
   }
 
-  // аутентификация: ник + секрет-токен. Существующий заклеймённый ник требует верный token.
-  onAuth(_client: Client, options: { name?: string; token?: string; ver?: number }, context?: AuthContext): { name: string; ip: string } {
+  // аутентификация: ник + секрет-токен, либо email + пароль (ник резолвится из привязки).
+  // Существующий заклеймённый ник требует верный token.
+  onAuth(_client: Client, options: { name?: string; token?: string; ver?: number; email?: string; password?: string }, context?: AuthContext): { name: string; ip: string; bindEmail?: string; bindPass?: string } {
     // хендшейк версии: присланный, но несовпадающий ver отклоняем (устаревший клиент после бампа схемы)
     if (options?.ver !== undefined && options.ver !== PROTOCOL_VERSION) throw new Error('bad_version');
+    // email-ветка — до ник-ветки: известная почта сама восстанавливает ник (options.name игнорируется)
+    const email = String(options?.email ?? '').trim().toLowerCase().slice(0, 64);
+    const password = String(options?.password ?? '');
+    if (email) {
+      const acc = this.db.getByEmail(email);
+      if (acc) {
+        if (!verifyPassword(password, acc.passhash)) throw new Error('bad_password');
+        const existingId = this.findSessionByName(acc.name);
+        if (existingId && !this.runtimes.get(existingId)?.frozen) throw new Error('name_online');
+        const rawIp = context?.ip;
+        const ip = Array.isArray(rawIp) ? (rawIp[0] ?? '') : (rawIp ?? '').split(',')[0].trim();
+        const ban = this.db.getActiveBan(acc.name, Date.now()) ?? this.db.getActiveIpBan(ip, Date.now());
+        if (ban) throw new Error(ban.until === null ? 'banned_perm' : 'banned');
+        return { name: acc.name, ip }; // вход по email: ник восстановлен, токен не нужен
+      }
+      if (password.length < 4) throw new Error('weak_password'); // привязка новой почты — минимум 4
+    }
     const name = String(options?.name ?? '').slice(0, 16);
     if (!name) throw new Error('need_name');
     const auth = this.db.getAuth(name);
@@ -228,7 +247,7 @@ export class CityRoom extends Room<GameState> {
     const ip = Array.isArray(rawIp) ? (rawIp[0] ?? '') : (rawIp ?? '').split(',')[0].trim();
     const ban = this.db.getActiveBan(name, Date.now()) ?? this.db.getActiveIpBan(ip, Date.now());
     if (ban) throw new Error(ban.until === null ? 'banned_perm' : 'banned'); // перманент и временный различаем кодом
-    return { name, ip };
+    return { name, ip, ...(email ? { bindEmail: email, bindPass: password } : {}) };
   }
 
   onJoin(client: Client, options: { name?: string; role?: string }): void {
@@ -242,6 +261,10 @@ export class CityRoom extends Room<GameState> {
       if (cops >= COP_LIMIT) role = 'citizen';
     }
     const rec = this.db.load(name);
+    const auth = client.auth as { name: string; ip?: string; bindEmail?: string; bindPass?: string };
+    if (auth.bindEmail && auth.bindPass && !rec.email && !this.db.getByEmail(auth.bindEmail)) {
+      this.db.bindEmail(name, auth.bindEmail, hashPassword(auth.bindPass)); // первая привязка — перезапись запрещена
+    }
 
     const p = new Player();
     p.name = name;
@@ -270,12 +293,12 @@ export class CityRoom extends Room<GameState> {
     rt.kills = rec.kills;
     rt.deaths = rec.deaths;
     rt.playtimeSec = this.db.getPlaytime(name); // наигрыш переживает релог
-    rt.ip = (client.auth as { name: string; ip?: string }).ip ?? ''; // из onAuth — антифарм-лимит переводов по IP
+    rt.ip = auth.ip ?? ''; // из onAuth — антифарм-лимит переводов по IP
     rt.nextRentAt = this.db.getRentDue(name) || (Date.now() + RENT_INTERVAL_MS); // рента переживает релог
     rt.salaryAnchorX = p.x; // якорь патруля = точка спавна
     rt.salaryAnchorZ = p.z;
     this.runtimes.set(client.sessionId, rt);
-    client.send('authToken', { token: rec.secret ?? '' });
+    client.send('authToken', { token: rec.secret ?? '', name }); // name — клиент кладёт токен под резолвнутый ник (вход по email)
     client.send('smsInbox', { unread: this.db.unreadCount(name) });
     this.broadcast('sys', { code: 'join', name, t: this.state.serverTime }); // системное: вошёл в город
   }

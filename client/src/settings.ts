@@ -33,6 +33,10 @@ export class Settings {
       localStorage.setItem('quality', quality.value);
       this.applyQuality(quality.value);
     });
+    document.getElementById('setLogout')!.addEventListener('click', () => {
+      for (const k of Object.keys(localStorage).filter(k => k.startsWith('tok:'))) localStorage.removeItem(k); // сброс клейма ника
+      location.reload();
+    });
     document.getElementById('settingsClose')!.addEventListener('click', () => this.close());
   }
 

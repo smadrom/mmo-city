@@ -134,6 +134,15 @@ describe('GameDB', () => {
     expect(db.getAuth('nobody')).toEqual({ exists: false, secret: '' });
   });
 
+  it('email: bindEmail/getByEmail roundtrip, неизвестный → null', () => {
+    db = new GameDB(':memory:');
+    db.load('neo');
+    expect(db.getByEmail('neo@example.com')).toBeNull();
+    db.bindEmail('neo', 'neo@example.com', 'salt:hash');
+    expect(db.getByEmail('neo@example.com')).toEqual({ name: 'neo', passhash: 'salt:hash' });
+    expect(db.getByEmail('')).toBeNull(); // пустой email не должен совпасть с непривязанными аккаунтами
+  });
+
   it('rent_due: setRentDue/getRentDue персистятся, дефолт 0', () => {
     db = new GameDB(':memory:');
     db.load('renter');

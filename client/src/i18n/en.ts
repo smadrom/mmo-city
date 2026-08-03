@@ -3,10 +3,14 @@ import type { ru } from './ru.js';
 // English dictionary. Ключи обязаны совпадать с ru (тип Record<keyof typeof ru, string>).
 export const en: Record<keyof typeof ru, string> = {
   'join.nickPh': 'Nick',
+  'join.emailPh': 'Email (optional)',
+  'join.passPh': 'Password (optional)',
   'join.citizen': 'Citizen',
   'join.cop': 'Police officer',
   'join.needName': 'Enter a nick',
   'join.badToken': 'This nick is taken by another player',
+  'join.badPassword': 'Wrong password',
+  'join.weakPassword': 'Password min 4 chars',
   'join.badVersion': 'Refresh the page (new server version)',
   'join.banned': 'Account banned',
   'join.full': 'Server is full (100/100) or unavailable — try later',
@@ -115,6 +119,7 @@ export const en: Record<keyof typeof ru, string> = {
   'settings.quality': 'Quality',
   'settings.qualityHigh': 'High',
   'settings.qualityLow': 'Low',
+  'settings.logout': 'Log out',
   'settings.langNote': 'World labels will update after rejoin',
   'hint.move': 'WASD — move, mouse — camera, wheel — zoom, Esc — settings',
   'hint.car': 'Earn by delivery: enter a car (E), then P → Job',

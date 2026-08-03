@@ -12,6 +12,7 @@ export interface PlayerRecord {
   weapon: string;
   ammo: number;
   secret?: string; // токен владельца аккаунта (не попадает в реплицируемое состояние)
+  email?: string; // привязанная почта ('' = не привязана); перезапись запрещена
   playtimeSec?: number; // наигрыш в секундах (колонка playtime_sec); антимультиаккаунт
 }
 
@@ -82,6 +83,8 @@ export class GameDB {
     if (!has('secret')) this.db.exec(`ALTER TABLE players ADD COLUMN secret TEXT NOT NULL DEFAULT ''`);
     if (!has('rent_due')) this.db.exec(`ALTER TABLE players ADD COLUMN rent_due INTEGER NOT NULL DEFAULT 0`);
     if (!has('playtime_sec')) this.db.exec(`ALTER TABLE players ADD COLUMN playtime_sec INTEGER NOT NULL DEFAULT 0`);
+    if (!has('email')) this.db.exec(`ALTER TABLE players ADD COLUMN email TEXT NOT NULL DEFAULT ''`);
+    if (!has('passhash')) this.db.exec(`ALTER TABLE players ADD COLUMN passhash TEXT NOT NULL DEFAULT ''`);
   }
 
   load(name: string): PlayerRecord {
@@ -105,6 +108,18 @@ export class GameDB {
   getAuth(name: string): { exists: boolean; secret: string } {
     const row = this.db.prepare('SELECT secret FROM players WHERE name = ?').get(name) as { secret: string } | undefined;
     return { exists: !!row, secret: row?.secret ?? '' };
+  }
+
+  // привязка email к аккаунту; перезапись запрещена — проверка «ещё не привязан» наверху, в onJoin
+  bindEmail(name: string, email: string, passhash: string): void {
+    this.db.prepare('UPDATE players SET email = ?, passhash = ? WHERE name = ?').run(email, passhash, name);
+  }
+
+  // вход по email: сервер восстанавливает ник и сверяет пароль
+  getByEmail(email: string): { name: string; passhash: string } | null {
+    if (!email) return null; // '' — дефолт непривязанных аккаунтов, не должен совпадать
+    const row = this.db.prepare('SELECT name, passhash FROM players WHERE email = ?').get(email) as { name: string; passhash: string } | undefined;
+    return row ?? null;
   }
 
   // срок следующей ренты (ms). 0 = не задан (новый/без квартиры). Персистится → релог не сбрасывает.

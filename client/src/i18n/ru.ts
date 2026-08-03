@@ -1,10 +1,14 @@
 // Русский словарь (язык по умолчанию). Ключи — точка-нотация по модулям.
 export const ru: Record<string, string> = {
   'join.nickPh': 'Ник',
+  'join.emailPh': 'Email (необязательно)',
+  'join.passPh': 'Пароль (необязательно)',
   'join.citizen': 'Гражданин',
   'join.cop': 'Полицейский',
   'join.needName': 'Введи ник',
   'join.badToken': 'Этот ник уже занят другим игроком',
+  'join.badPassword': 'Неверный пароль',
+  'join.weakPassword': 'Пароль минимум 4 символа',
   'join.badVersion': 'Обновите страницу (новая версия сервера)',
   'join.banned': 'Аккаунт заблокирован',
   'join.full': 'Сервер полон (100/100) или недоступен — попробуйте позже',
@@ -113,6 +117,7 @@ export const ru: Record<string, string> = {
   'settings.quality': 'Качество',
   'settings.qualityHigh': 'Высокое',
   'settings.qualityLow': 'Низкое',
+  'settings.logout': 'Выйти из аккаунта',
   'settings.langNote': 'Подписи в мире обновятся после перезахода',
   'hint.move': 'WASD — движение, мышь — камера, колесо — зум, Esc — настройки',
   'hint.car': 'Заработок — доставка: сядь в машину (E), затем P → Работа',

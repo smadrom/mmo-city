@@ -21,4 +21,6 @@ COPY server ./server
 RUN mkdir -p /data && chown -R node:node /data /app
 USER node
 EXPOSE 2567
-CMD ["npx", "tsx", "server/src/index.ts"]
+# cwd=server — tsx подхватывает server/tsconfig.json (experimentalDecorators для @colyseus/schema)
+WORKDIR /app/server
+CMD ["npx", "tsx", "src/index.ts"]

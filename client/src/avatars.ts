@@ -19,8 +19,10 @@ interface PlayerMesh {
   recoilAt: number;
 }
 
-// интерполяция: рендерим чужих с задержкой INTERP_DELAY_MS по буферу снапшотов
-const INTERP_DELAY_MS = 120;
+// интерполяция: рендерим чужих с адаптивной задержкой (медиана интервала патчей ×1.5+30)
+const MIN_DELAY_MS = 60;
+const MAX_DELAY_MS = 250;
+const EXTRAPOLATE_CAP_S = 0.25; // дальше — заморозка (патчей нет совсем)
 const SNAP_BUFFER_MS = 1000;
 
 interface Snap { t: number; x: number; z: number; rotY: number }
@@ -39,18 +41,44 @@ function pushSnap(buf: Snap[], t: number, x: number, z: number, rotY: number): v
   while (buf.length > 2 && buf[0].t < t - SNAP_BUFFER_MS) buf.shift();
 }
 
+function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number, segLen: number): number {
+  const v = 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t);
+  const maxDev = Math.max(1, segLen * 1.5); // анти-overshoot: резкий разворот не должен выкидывать за угол
+  return Math.max(p2 - maxDev, Math.min(p2 + maxDev, v));
+}
+
 function sampleSnap(buf: Snap[], rt: number): Snap | null {
   if (buf.length === 0) return null;
-  if (rt <= buf[0].t) return buf[0];
   const last = buf[buf.length - 1];
-  if (rt >= last.t) return last;
+  if (rt >= last.t) {
+    // экстраполяция по последней скорости при разрыве патчей (кап EXTRAPOLATE_CAP_S)
+    if (buf.length < 2) return last;
+    const prev = buf[buf.length - 2];
+    const dt = Math.min(EXTRAPOLATE_CAP_S, (rt - last.t) / 1000);
+    const span = Math.max(1, last.t - prev.t) / 1000;
+    return {
+      t: rt,
+      x: last.x + ((last.x - prev.x) / span) * dt,
+      z: last.z + ((last.z - prev.z) / span) * dt,
+      rotY: last.rotY,
+    };
+  }
+  if (rt <= buf[0].t) return buf[0];
   for (let i = buf.length - 1; i > 0; i--) {
     const a = buf[i - 1];
     const b = buf[i];
     if (a.t <= rt) {
       const d = b.t - a.t;
-      const alpha = d > 0 ? (rt - a.t) / d : 1; // равные t — берём более свежий снап, без 0/0
-      return { t: rt, x: a.x + (b.x - a.x) * alpha, z: a.z + (b.z - a.z) * alpha, rotY: lerpAngle(a.rotY, b.rotY, alpha) };
+      const alpha = d > 0 ? (rt - a.t) / d : 1; // равные t — свежий снап, без 0/0
+      const p0 = buf[i - 2] ?? a;
+      const p3 = buf[i + 1] ?? b;
+      const segLen = Math.hypot(b.x - a.x, b.z - a.z);
+      return {
+        t: rt,
+        x: catmullRom(p0.x, a.x, b.x, p3.x, alpha, segLen),
+        z: catmullRom(p0.z, a.z, b.z, p3.z, alpha, segLen),
+        rotY: lerpAngle(a.rotY, b.rotY, alpha),
+      };
     }
   }
   return buf[0];
@@ -196,6 +224,8 @@ export class Avatars {
   private cars = new Map<string, CarMesh>();
   private playerSnaps = new Map<string, Snap[]>();
   private carSnaps = new Map<string, Snap[]>();
+  private patchIntervals: number[] = [];
+  private lastPatchAt = 0;
   private room!: Room; // не readonly: реконнект переприсваивает через attach
 
   constructor(private scene: THREE.Scene, room: Room) {
@@ -227,6 +257,12 @@ export class Avatars {
       if (!st) return; // serverTime ещё не проставлен
       const sample = st - Date.now();
       this.serverOffset += (sample - this.serverOffset) * 0.05;
+      const now = performance.now();
+      if (this.lastPatchAt) {
+        this.patchIntervals.push(now - this.lastPatchAt);
+        if (this.patchIntervals.length > 10) this.patchIntervals.shift();
+      }
+      this.lastPatchAt = now;
     });
 
     // colyseus.js 0.16: колбеки состояния регистрируются через getStateCallbacks
@@ -285,6 +321,14 @@ export class Avatars {
     return Date.now() + this.serverOffset;
   }
 
+  // адаптивная задержка интерполяции: медиана интервала патчей ×1.5 + запас, в рамках 60..250мс
+  private renderDelay(): number {
+    if (this.patchIntervals.length < 3) return 150; // данных мало — безопасный дефолт
+    const sorted = [...this.patchIntervals].sort((a, b) => a - b);
+    const med = sorted[Math.floor(sorted.length / 2)];
+    return Math.min(MAX_DELAY_MS, Math.max(MIN_DELAY_MS, med * 1.5 + 30));
+  }
+
   // текущая отрисованная (интерполированная) позиция меша игрока — для tracer'ов
   meshPos(id: string): { x: number; z: number } | null {
     const mesh = this.players.get(id);
@@ -304,7 +348,7 @@ export class Avatars {
 
   update(dt: number): void {
     const nowServer = this.serverNow();
-    const rt = nowServer - INTERP_DELAY_MS;
+    const rt = nowServer - this.renderDelay();
     // красные маркеры розыска над головами показываем только копам
     const iAmCop = (this.room.state.players as any).get(this.room.sessionId)?.role === 'cop';
 

@@ -7,6 +7,7 @@ import { isTypingTarget } from './input.js';
 const TRACER_MS = 80;
 const VIGNETTE_MS = 150;
 const SHOT_SOUND_DIST = 60; // дальше этого радиуса щелчок не играем
+const SKIDMARK_MS = 10_000; // время жизни следа шин
 
 interface Tracer { line: THREE.Line; bornAt: number }
 interface DamageNumber { sprite: THREE.Sprite; bornAt: number }
@@ -25,6 +26,11 @@ export class Effects {
   muted = localStorage.getItem('mute') === '1'; // публичное: main.ts читает для тоста
   volume = (() => { const v = Number(localStorage.getItem('vol') ?? '1'); return Number.isFinite(v) ? v : 1; })(); // '0' — валидная громкость, не схлопываем в 1
   private prevMode = '';
+  private engineOsc: OscillatorNode | null = null;
+  private engineGain: GainNode | null = null;
+  private lastSkidAt = 0;
+  private skidmarks: { mesh: THREE.Mesh; bornAt: number }[] = [];
+  private skidmat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.6 });
 
   private room!: Room; // не readonly: реконнект переприсваивает через bind
 
@@ -84,6 +90,55 @@ export class Effects {
   // доставка оплачена: восходящая «монетка» (main.ts дёргает на 'delivered')
   cashIn(): void {
     this.tone(523, 0.25, 'sine', 0.08, 1046);
+  }
+
+  // мотор своей машины: зацикленный пилой, питч/громкость от скорости
+  engineStart(): void {
+    if (this.engineOsc || this.muted) return;
+    try {
+      this.audio ??= new AudioContext();
+      this.engineOsc = this.audio.createOscillator();
+      this.engineOsc.type = 'sawtooth';
+      this.engineOsc.frequency.setValueAtTime(50, this.audio.currentTime);
+      this.engineGain = this.audio.createGain();
+      this.engineGain.gain.setValueAtTime(0.0001, this.audio.currentTime);
+      this.engineOsc.connect(this.engineGain).connect(this.audio.destination);
+      this.engineOsc.start();
+    } catch { this.engineOsc = null; this.engineGain = null; }
+  }
+  engineUpdate(speed: number): void {
+    if (!this.engineOsc || !this.engineGain || !this.audio) return;
+    this.engineOsc.frequency.setTargetAtTime(40 + Math.abs(speed) * 3, this.audio.currentTime, 0.1);
+    this.engineGain.gain.setTargetAtTime(Math.min(0.06, 0.015 + Math.abs(speed) * 0.0015) * this.volume, this.audio.currentTime, 0.1);
+  }
+  engineStop(): void {
+    try { this.engineOsc?.stop(); } catch { /* уже остановлен */ }
+    this.engineOsc = null;
+    this.engineGain = null;
+  }
+
+  skid(): void { // визг шин, не чаще раза в 600 мс
+    const now = performance.now();
+    if (now - this.lastSkidAt < 600) return;
+    this.lastSkidAt = now;
+    this.tone(900, 0.3, 'sawtooth', 0.04, 400);
+  }
+  crash(): void { this.tone(90, 0.25, 'square', 0.1, 40); } // удар о стену
+
+  // тёмная полоска под машиной при резком торможении (детект по патчам в main, своя и чужие)
+  addSkidmark(x: number, z: number, rotY: number): void {
+    if (this.skidmarks.length > 200) {
+      const old = this.skidmarks.shift()!;
+      this.scene.remove(old.mesh);
+      old.mesh.geometry.dispose();
+      (old.mesh.material as THREE.Material).dispose(); // материал — клон skidmat, свой у каждой полоски
+    }
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 1.6), this.skidmat.clone());
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.rotation.z = rotY;
+    mesh.position.set(x, 0.035, z);
+    this.scene.add(mesh);
+    this.skidmarks.push({ mesh, bornAt: performance.now() });
   }
 
   // мини-синтез без ассетов: тон с экспоненциальным затуханием, опциональный слайд частоты
@@ -154,9 +209,16 @@ export class Effects {
     this.dmgDirTimer = window.setTimeout(() => this.dmgDir.classList.add('hidden'), 400);
   }
 
-  update(me?: { mode: string }): void {
+  update(me?: { mode: string }, carSpeed = 0): void {
     if (me && me.mode === 'dead' && this.prevMode !== 'dead') this.tone(300, 0.5, 'sawtooth', 0.09, 60); // моя смерть
     if (me) this.prevMode = me.mode;
+    // мотор звучит только в машине и не при mute; вышел/умер/заглушил звук — стоп
+    if (me && me.mode === 'car' && !this.muted) {
+      this.engineStart();
+      this.engineUpdate(carSpeed);
+    } else {
+      this.engineStop();
+    }
     const now = performance.now();
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];
@@ -182,6 +244,19 @@ export class Effects {
       } else {
         d.sprite.position.y = 2.3 + t * 0.7;
         (d.sprite.material as THREE.SpriteMaterial).opacity = 1 - t;
+      }
+    }
+    // следы шин: живут 10 с, гаснут по остатку времени
+    for (let i = this.skidmarks.length - 1; i >= 0; i--) {
+      const s = this.skidmarks[i];
+      const k = 1 - (now - s.bornAt) / SKIDMARK_MS;
+      if (k <= 0) {
+        this.scene.remove(s.mesh);
+        s.mesh.geometry.dispose();
+        (s.mesh.material as THREE.Material).dispose(); // клон skidmat — чужой не трогаем
+        this.skidmarks.splice(i, 1);
+      } else {
+        (s.mesh.material as THREE.MeshBasicMaterial).opacity = 0.6 * k;
       }
     }
   }

@@ -17,7 +17,7 @@ import { TabList } from './tablist.js';
 import { TouchControls } from './touch.js';
 import { t, setLang, getLang, applyStatic } from './i18n/index.js';
 import type { Room } from 'colyseus.js';
-import { CAR_MAX_SPEED } from '@mmo/shared';
+import { CAR_MAX_SPEED, dist2 } from '@mmo/shared';
 
 applyStatic(); // статика экрана входа — сразу на языке пользователя
 
@@ -117,6 +117,7 @@ function bootGame(room: Room): void {
   let lastCarId = '';
   let camDist = 7;
   let camSmX = 0, camSmZ = 0, camInit = false, camShake = 0, lastOwnSpeed = 0;
+  const lastCarSpeeds = new Map<string, number>(); // скорость машин прошлого кадра — детект резкого торможения
   let reconnecting = false;
 
   // зум колёсиком — только когда не открыта карта/телефон и не печатаем
@@ -244,8 +245,8 @@ function bootGame(room: Room): void {
     const dt = clock.getDelta();
     input.refresh();
     const me = (current.state.players as any).get(current.sessionId);
+    const ownCar = me && me.mode === 'car' ? (current.state.cars as any).get(me.carId) : undefined;
     if (me) {
-      const ownCar = me.mode === 'car' ? (current.state.cars as any).get(me.carId) : undefined;
       const predicted = prediction.update(dt, input.current, me.mode, me.x, me.z, ownCar);
       avatars.selfPos = predicted && me.mode === 'foot' ? { x: prediction.x, z: prediction.z } : null;
       avatars.selfCarPos = predicted && me.mode === 'car' && prediction.car
@@ -261,8 +262,9 @@ function bootGame(room: Room): void {
       camSmZ += (targetZ - camSmZ) * k;
       // тряска при резкой потере скорости (столкновение/наезд по мне)
       const ownSpeed = inCar && ownCar ? Math.abs(ownCar.speed) : 0;
-      if (lastOwnSpeed - ownSpeed > 8) camShake = 0.5;
+      if (lastOwnSpeed - ownSpeed > 8) { camShake = 0.5; effects.crash(); } // удар: тряска + звук
       lastOwnSpeed = ownSpeed;
+      if (inCar && input.current.down && ownSpeed > 12) effects.skid(); // торможение с визгом (гард 600 мс внутри)
       camShake = Math.max(0, camShake - dt * 1.5);
       const shakeX = camShake ? (Math.random() - 0.5) * camShake : 0;
       const shakeZ = camShake ? (Math.random() - 0.5) * camShake : 0;
@@ -272,7 +274,19 @@ function bootGame(room: Room): void {
       updateCamera(camera, camSmX + shakeX, camSmZ + shakeZ, input.yaw, camDist + speedBoost, input.aiming && document.pointerLockElement !== null, dt, camColliders, roll);
     }
     avatars.update(dt);
-    effects.update(me ?? undefined);
+    effects.update(me ?? undefined, ownCar ? Math.abs(ownCar.speed) : 0);
+    // следы шин по всем машинам: падение скорости >8 между кадрами — резкое торможение
+    (current.state.cars as any).forEach((car: any, id: string) => {
+      const last = lastCarSpeeds.get(id) ?? Math.abs(car.speed);
+      if (last - Math.abs(car.speed) > 8) {
+        effects.addSkidmark(car.x, car.z, car.rotY);
+        // чужой визг слышим только вблизи (свой уже сработал выше по down)
+        if (me && dist2(car.x, car.z, me.x, me.z) < 30 * 30) effects.skid();
+      }
+      lastCarSpeeds.set(id, Math.abs(car.speed));
+    });
+    // машина убрана из стейта — чистим, чтобы map не росла
+    for (const id of [...lastCarSpeeds.keys()]) if (!(current.state.cars as any).has(id)) lastCarSpeeds.delete(id);
     fx.update(performance.now());
     pickups.update();
     ui.update();

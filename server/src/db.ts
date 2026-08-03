@@ -72,6 +72,9 @@ export class GameDB {
       )
     `);
     this.migrate();
+    // частичный UNIQUE-индекс: у непривязанных email='' — конфликтовать не должны.
+    // После migrate(): колонка email появляется там, в свежей CREATE TABLE её нет.
+    this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_players_email ON players(email) WHERE email != ''`);
   }
 
   // идемпотентно: добавляет колонки, которых нет (старые БД MVP)

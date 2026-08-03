@@ -219,7 +219,7 @@ export class CityRoom extends Room<GameState> {
     if (options?.ver !== undefined && options.ver !== PROTOCOL_VERSION) throw new Error('bad_version');
     // email-ветка — до ник-ветки: известная почта сама восстанавливает ник (options.name игнорируется)
     const email = String(options?.email ?? '').trim().toLowerCase().slice(0, 64);
-    const password = String(options?.password ?? '');
+    const password = String(options?.password ?? '').slice(0, 128);
     if (email) {
       const acc = this.db.getByEmail(email);
       if (acc) {
@@ -263,8 +263,11 @@ export class CityRoom extends Room<GameState> {
     const rec = this.db.load(name);
     const auth = client.auth as { name: string; ip?: string; bindEmail?: string; bindPass?: string };
     if (auth.bindEmail && auth.bindPass && !rec.email && !this.db.getByEmail(auth.bindEmail)) {
-      this.db.bindEmail(name, auth.bindEmail, hashPassword(auth.bindPass)); // первая привязка — перезапись запрещена
+      try {
+        this.db.bindEmail(name, auth.bindEmail, hashPassword(auth.bindPass)); // первая привязка — перезапись запрещена
+      } catch { /* UNIQUE-гонка за один email двумя никами — не роняем вход */ }
     }
+    delete auth.bindPass; delete auth.bindEmail; // пароль не должен жить в client.auth всю сессию
 
     const p = new Player();
     p.name = name;

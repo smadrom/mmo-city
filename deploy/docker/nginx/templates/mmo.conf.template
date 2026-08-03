@@ -1,0 +1,56 @@
+# Прод-конфиг nginx для MMO City. ${DOMAIN} подставляет envsubst из environment контейнера.
+# Держится на хосте и монтируется в /etc/nginx/templates — правится без пересборки образа.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    # продление certbot webroot'ом (nginx работает — порт 80 занят им)
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # статика клиента; всё, что не файл (WS на /, POST /matchmake/*), — на игровой сервер
+    location / {
+        try_files $uri $uri/ @game;
+    }
+
+    location @game {
+        proxy_pass http://server:2567;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; # IP для антифарма/банов
+        proxy_read_timeout 3600s; # не рвать «тихие» WS
+    }
+
+    location = /healthz {
+        proxy_pass http://server:2567;
+    }
+
+    location /admin/api/ {
+        proxy_pass http://server:2567;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # админка — статика из образа
+    location /admin/ {
+        alias /usr/share/nginx/admin/;
+    }
+}

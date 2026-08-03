@@ -2,3 +2,4 @@ node_modules/
 dist/
 game.db*
 *.log
+deploy/docker/.env

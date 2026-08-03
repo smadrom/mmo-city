@@ -1,0 +1,36 @@
+# MMO City — прод-стек: игровой сервер + nginx (TLS, статика, WS-прокси).
+# Запуск: cd deploy/docker && docker compose up -d --build
+# Конфигурация — .env (DOMAIN, ADMIN_TOKEN), см. .env.example.
+services:
+  server:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: mmo-server
+    env_file: .env
+    environment:
+      GAME_DB: /data/game.db
+      PORT: 2567
+    volumes:
+      - /srv/mmo/data:/data # game.db — на хосте, удобно бэкапить
+    ports:
+      - "127.0.0.1:2567:2567" # только localhost: healthz и админ-туннель
+    restart: always
+
+  nginx:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/nginx.Dockerfile
+    container_name: mmo-nginx
+    environment:
+      DOMAIN: ${DOMAIN} # envsubst в templates подставит в server_name и пути сертификата
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /srv/mmo/certbot-www:/var/www/certbot
+      - /srv/mmo/deploy/docker/nginx/templates:/etc/nginx/templates:ro
+    depends_on:
+      - server
+    restart: always

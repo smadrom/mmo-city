@@ -1,4 +1,7 @@
-import { MAP_HALF, PLAYER_RADIUS, PLAYER_SPEED, PLAYER_SPRINT } from './config.js';
+import {
+  MAP_HALF, PLAYER_RADIUS, PLAYER_SPEED, PLAYER_SPRINT,
+  CAR_MAX_SPEED, CAR_REVERSE_SPEED, CAR_ACCEL, CAR_BRAKE, CAR_DRAG, CAR_TURN_RATE, CAR_RADIUS,
+} from './config.js';
 
 export interface AABB { x: number; z: number; w: number; d: number; }
 
@@ -62,6 +65,43 @@ export function stepFoot(
     x: clamp(res.x, -MAP_HALF + PLAYER_RADIUS, MAP_HALF - PLAYER_RADIUS),
     z: clamp(res.z, -MAP_HALF + PLAYER_RADIUS, MAP_HALF - PLAYER_RADIUS),
   };
+}
+
+export interface CarStepState { x: number; z: number; rotY: number; speed: number }
+
+// Один шаг машины — общий для сервера (тик) и клиента (предсказание своей машины),
+// чтобы математика не расходилась. Мутирует s, возвращает steer для отображения руля.
+export function stepCar(
+  s: CarStepState, inp: MoveInput, dt: number, colliders: AABB[], safeZones: AABB[] = [],
+): { steer: number } {
+  if (inp.up) s.speed = Math.min(CAR_MAX_SPEED, s.speed + CAR_ACCEL * dt);
+  else if (inp.down) {
+    s.speed = s.speed > 0
+      ? Math.max(0, s.speed - CAR_BRAKE * dt)
+      : Math.max(-CAR_REVERSE_SPEED, s.speed - CAR_ACCEL * dt);
+  } else if (s.speed > 0) s.speed = Math.max(0, s.speed - CAR_DRAG * dt);
+  else if (s.speed < 0) s.speed = Math.min(0, s.speed + CAR_DRAG * dt);
+
+  const steer = (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
+  // agility: на стоянке руль не ворочается, на максималке подруливает слабее
+  const agility = Math.min(1, Math.abs(s.speed) / 3) * (1 - 0.6 * (Math.abs(s.speed) / CAR_MAX_SPEED));
+  s.rotY += steer * CAR_TURN_RATE * agility * Math.sign(s.speed) * dt;
+
+  if (s.speed !== 0) {
+    const nx = clamp(s.x - Math.sin(s.rotY) * s.speed * dt, -MAP_HALF + CAR_RADIUS, MAP_HALF - CAR_RADIUS);
+    const nz = clamp(s.z - Math.cos(s.rotY) * s.speed * dt, -MAP_HALF + CAR_RADIUS, MAP_HALF - CAR_RADIUS);
+    if (collidesAny(nx, nz, CAR_RADIUS, colliders)) {
+      s.speed = 0;
+    } else if (inAnyAABB(nx, nz, safeZones)) {
+      // граница безопасной зоны разворачивает (как в GTA SA)
+      s.speed = 0;
+      s.rotY += Math.PI;
+    } else {
+      s.x = nx;
+      s.z = nz;
+    }
+  }
+  return { steer };
 }
 
 export function dist2(ax: number, az: number, bx: number, bz: number): number {

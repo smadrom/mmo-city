@@ -235,9 +235,13 @@ function bootGame(room: Room): void {
     input.refresh();
     const me = (current.state.players as any).get(current.sessionId);
     if (me) {
-      const predicted = prediction.update(dt, input.current, me.mode, me.x, me.z);
-      avatars.selfPos = predicted ? { x: prediction.x, z: prediction.z } : null;
-      updateCamera(camera, avatars.selfPos?.x ?? me.x, avatars.selfPos?.z ?? me.z, input.yaw, camDist, input.aiming && document.pointerLockElement !== null, dt, camColliders);
+      const ownCar = me.mode === 'car' ? (current.state.cars as any).get(me.carId) : undefined;
+      const predicted = prediction.update(dt, input.current, me.mode, me.x, me.z, ownCar);
+      avatars.selfPos = predicted && me.mode === 'foot' ? { x: prediction.x, z: prediction.z } : null;
+      avatars.selfCarPos = predicted && me.mode === 'car' && prediction.car
+        ? { x: prediction.car.x, z: prediction.car.z, rotY: prediction.car.rotY }
+        : null;
+      updateCamera(camera, avatars.selfCarPos?.x ?? avatars.selfPos?.x ?? me.x, avatars.selfCarPos?.z ?? avatars.selfPos?.z ?? me.z, input.yaw, camDist, input.aiming && document.pointerLockElement !== null, dt, camColliders);
     }
     avatars.update(dt);
     effects.update(me ?? undefined);

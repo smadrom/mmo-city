@@ -1,8 +1,8 @@
 import {
-  CAR_RADIUS, CAR_MAX_SPEED, CAR_REVERSE_SPEED, CAR_ACCEL, CAR_BRAKE, CAR_DRAG, CAR_TURN_RATE,
-  CAR_ENTER_DIST, CAR_PARK_RETURN_MS, MAP_HALF, PLAYER_RADIUS,
+  CAR_RADIUS, CAR_ENTER_DIST, CAR_PARK_RETURN_MS, MAP_HALF, PLAYER_RADIUS,
   RUNOVER_MIN_SPEED, RUNOVER_DAMAGE_K, RUNOVER_KNOCKBACK_K, RUNOVER_REPEAT_MS, CAR_CRASH_SPEED_KEEP,
-  collidesAny, clamp, dist2, moveCircle, inAnyAABB, type AABB, type ParkingSpot,
+  collidesAny, clamp, dist2, moveCircle, inAnyAABB, stepCar,
+  type AABB, type ParkingSpot, type CarStepState,
 } from '@mmo/shared';
 import type { GameState, Car } from '../schema/GameState.js';
 import type { Runtime } from '../runtime.js';
@@ -35,34 +35,11 @@ export function tickVehicles(
         car.speed = 0;
         return;
       }
-      const inp = rt.input;
-      if (inp.up) car.speed = Math.min(CAR_MAX_SPEED, car.speed + CAR_ACCEL * dt);
-      else if (inp.down) {
-        car.speed = car.speed > 0
-          ? Math.max(0, car.speed - CAR_BRAKE * dt)
-          : Math.max(-CAR_REVERSE_SPEED, car.speed - CAR_ACCEL * dt);
-      } else if (car.speed > 0) car.speed = Math.max(0, car.speed - CAR_DRAG * dt);
-      else if (car.speed < 0) car.speed = Math.min(0, car.speed + CAR_DRAG * dt);
-
-      const steer = (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
+      // вся физика водителя — в shared.stepCar: клиент шагает её же для предсказания
+      const s: CarStepState = { x: car.x, z: car.z, rotY: car.rotY, speed: car.speed };
+      const { steer } = stepCar(s, rt.input, dt, colliders, safeZones);
+      car.x = s.x; car.z = s.z; car.rotY = s.rotY; car.speed = s.speed;
       car.steer = steer;
-      const agility = Math.min(1, Math.abs(car.speed) / 3) * (1 - 0.6 * (Math.abs(car.speed) / CAR_MAX_SPEED));
-      car.rotY += steer * CAR_TURN_RATE * agility * Math.sign(car.speed) * dt;
-
-      if (car.speed !== 0) {
-        const nx = clamp(car.x - Math.sin(car.rotY) * car.speed * dt, -MAP_HALF + CAR_RADIUS, MAP_HALF - CAR_RADIUS);
-        const nz = clamp(car.z - Math.cos(car.rotY) * car.speed * dt, -MAP_HALF + CAR_RADIUS, MAP_HALF - CAR_RADIUS);
-        if (collidesAny(nx, nz, CAR_RADIUS, colliders)) {
-          car.speed = 0;
-        } else if (inAnyAABB(nx, nz, safeZones)) {
-          // граница безопасной зоны разворачивает (как в GTA SA)
-          car.speed = 0;
-          car.rotY += Math.PI;
-        } else {
-          car.x = nx;
-          car.z = nz;
-        }
-      }
       driver.x = car.x;
       driver.z = car.z;
       driver.rotY = car.rotY;

@@ -190,6 +190,8 @@ export class Avatars {
   private serverOffset!: number; // присваивается в attach (в т.ч. при реконнекте)
   // предсказанная позиция себя (пешком); null — едем по серверному state
   selfPos: { x: number; z: number } | null = null;
+  // предсказанная позиция своей машины; null — не в машине (рендер по серверу)
+  selfCarPos: { x: number; z: number; rotY: number } | null = null;
   private players = new Map<string, PlayerMesh>();
   private cars = new Map<string, CarMesh>();
   private playerSnaps = new Map<string, Snap[]>();
@@ -365,8 +367,10 @@ export class Avatars {
       const angle = (c.speed * dt) / 0.35; // r колеса 0.35
       for (const w of mesh.wheels) w.rotateOnAxis(WHEEL_AXIS_Y, angle);
       if (c.driverId === this.room.sessionId) {
-        mesh.group.position.set(c.x, 0, c.z);
-        mesh.group.rotation.y = c.rotY;
+        // своя машина — по предсказанию: сырые патчи 20 Гц дёргаются
+        const pos = this.selfCarPos ?? { x: c.x, z: c.z, rotY: c.rotY };
+        mesh.group.position.set(pos.x, 0, pos.z);
+        mesh.group.rotation.y = pos.rotY;
       } else {
         const buf = this.carSnaps.get(id)!;
         pushSnap(buf, nowServer, c.x, c.z, c.rotY);

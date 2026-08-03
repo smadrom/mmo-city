@@ -1,6 +1,8 @@
 # Игровой сервер MMO City (Colyseus + tsx). Образ без dev-зависимостей.
 # Контекст сборки — КОРЕНЬ репо (нужны package-lock и workspace-манифесты).
 FROM node:20-bookworm-slim AS deps
+# toolchain для node-gyp: у better-sqlite3 нет prebuilt под node 20.20 (собирается из исходников)
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json server/

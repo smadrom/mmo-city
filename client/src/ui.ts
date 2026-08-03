@@ -28,6 +28,7 @@ export class UI {
   private crosshair = document.getElementById('crosshair')!;
   private seenChat = new Set<string>();
   private seenChatQueue: string[] = [];
+  private pingMs = -1;
 
   constructor(private room: Room, private map: CityMap, private avatars: Avatars, private input: InputController) {
     this.chatInput.maxLength = CHAT_MAX_LEN; // лимит из общего конфига, не из HTML
@@ -172,6 +173,8 @@ export class UI {
     this.toastTimer = window.setTimeout(() => this.toast.classList.add('hidden'), 2000);
   }
 
+  setPing(ms: number): void { this.pingMs = ms; } // rtt из pong (main), −1 = ещё не измерен
+
   update(): void {
     const me = this.me();
     if (!me) return;
@@ -194,7 +197,7 @@ export class UI {
     this.ammoBig.classList.toggle('hidden', !w?.ranged);
     if (w?.ranged) this.ammoBig.textContent = `▸ ${me.ammo}`;
     this.stats.textContent =
-      `${t('stats.cash')}: ${me.cash}$  |  ${t('stats.safe')}: ${me.safe}$\n` +
+      `${t('stats.cash')}: ${me.cash}$  |  ${t('stats.safe')}: ${me.safe}$${this.pingMs >= 0 ? `  ·  ${this.pingMs} ms` : ''}\n` +
       `${roleRu}${me.apt ? `  |  ${t('stats.apt')}: ${me.apt}` : ''}\n` +
       `${t('stats.weapon')}: ${w ? t(`weapon.${me.weapon}`) : t('stats.fists')}`;
 

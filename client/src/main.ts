@@ -125,7 +125,7 @@ function bootGame(room: Room): void {
     else settings.open();
   });
 
-  // F3 — FPS/пинг (пинг: эхо ping/pong раз в 2 с, только когда панель видна)
+  // F3 — FPS/пинг (пинг: эхо ping/pong раз в 5 с всегда — значение в HUD-статах)
   const debugEl = document.getElementById('debug')!;
   let debugOn = false;
   let frames = 0;
@@ -142,10 +142,9 @@ function bootGame(room: Room): void {
   });
   let pingT = 0;
   setInterval(() => {
-    if (!debugOn) return;
-    pingT = performance.now();
+    pingT = performance.now(); // пинг всегда (дёшево), F3-панель — только для FPS
     current.send('ping', { t: pingT });
-  }, 2000);
+  }, 5000);
 
   phone.onOpen = () => fullmap.close();
   fullmap.onOpen = () => phone.close();
@@ -177,7 +176,10 @@ function bootGame(room: Room): void {
       effects.cashIn();
     });
     r.onMessage('pong', (m: { t?: number }) => {
-      if (typeof m?.t === 'number' && m.t === pingT) rtt = Math.round(performance.now() - m.t);
+      if (typeof m?.t === 'number' && m.t === pingT) {
+        rtt = Math.round(performance.now() - m.t);
+        ui.setPing(rtt);
+      }
     });
     r.onLeave((code) => void onLeave(code));
   };

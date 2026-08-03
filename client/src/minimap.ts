@@ -4,7 +4,7 @@ import {
 } from '@mmo/shared';
 import { t } from './i18n/index.js';
 
-export interface MapMarker { x: number; z: number; kind: 'car' | 'target' }
+export interface MapMarker { x: number; z: number; kind: 'car' | 'target' | 'player'; color?: string }
 export interface Poi { x: number; z: number; label: string }
 
 const KIND_COLORS: Record<string, string> = {
@@ -63,7 +63,7 @@ export class CityMapRenderer {
       const sx = S / 2 + (m.x - self.x) * scale;
       const sz = S / 2 + (m.z - self.z) * scale;
       if (Math.hypot(sx - S / 2, sz - S / 2) > S / 2 - 5) continue;
-      ctx.fillStyle = m.kind === 'car' ? '#ffcc00' : m.kind === 'target' ? '#ff4444' : '#66aaff';
+      ctx.fillStyle = (m as MapMarker).color ?? (m.kind === 'car' ? '#ffcc00' : m.kind === 'target' ? '#ff4444' : '#66aaff');
       ctx.beginPath();
       ctx.arc(sx, sz, m.kind === 'poi' ? 2.5 : 4, 0, Math.PI * 2);
       ctx.fill();
@@ -111,7 +111,7 @@ export class CityMapRenderer {
       ctx.fillText(p.label, toX(p.x), toY(p.z) - 8);
     }
     for (const m of markers) {
-      ctx.fillStyle = m.kind === 'car' ? '#ffcc00' : '#ff4444';
+      ctx.fillStyle = m.color ?? (m.kind === 'car' ? '#ffcc00' : '#ff4444');
       ctx.beginPath();
       ctx.arc(toX(m.x), toY(m.z), 5, 0, Math.PI * 2);
       ctx.fill();

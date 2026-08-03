@@ -258,6 +258,14 @@ function bootGame(room: Room): void {
         const target = map.deliveryTargets.find(dt => dt.id === me.deliveryTarget);
         if (target) markers.push({ x: target.x, z: target.z, kind: 'target' });
       }
+      const nowSrv = avatars.serverNow();
+      (current.state.players as any).forEach((p: any, id: string) => {
+        if (id === current.sessionId || p.role === 'zombie') return; // себя рисует стрелка, зомби — шум
+        markers.push({
+          x: p.x, z: p.z, kind: 'player',
+          color: p.wantedUntil > nowSrv ? '#ff3333' : p.role === 'cop' ? '#4477ff' : '#ffffff',
+        });
+      });
       const selfView = {
         x: avatars.selfPos?.x ?? me.x,
         z: avatars.selfPos?.z ?? me.z,

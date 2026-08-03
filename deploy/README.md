@@ -1,13 +1,12 @@
-# Деплой MMO City на VPS (Docker)
+# Деплой MMO City на VPS (Docker + Traefik)
 
-Стек: два контейнера — `mmo-server` (Colyseus+tsx) и `mmo-nginx` (TLS, статика клиента, WS-прокси).
-Сервер уже жив: **77.42.4.230** (июльский билд на systemd, `/srv/mmo`, `game.db` с игроками).
-Ниже — переезд на Docker + TLS по своему домену.
+Стек: три контейнера — `mmo-traefik` (TLS сам через Let's Encrypt, роутинг), `mmo-web` (статика клиента+админки), `mmo-server` (Colyseus+tsx).
+Домен: **mmo.expw.net** → 77.42.4.230. Сервер жив: июльский билд на systemd, `/srv/mmo`, `game.db` с игроками.
 
-## 0. Что нужно заранее
+## 0. Подготовка
 
-- **Домен**: A-запись на `77.42.4.230`. Без домена TLS не выдать — игра работает только по wss.
-- Локальный `ssh root@77.42.4.230` с этой машины (ключ/агент) — `deploy.sh` ходит по ssh.
+- DNS уже настроен: `mmo.expw.net → 77.42.4.230` ✓
+- Локальный `ssh root@77.42.4.230` с этой машины — `deploy.sh` ходит по ssh.
 - **Docker** на VPS (один раз):
   ```bash
   ssh root@77.42.4.230 'apt update && apt install -y docker.io docker-compose-v2 && systemctl enable --now docker'
@@ -17,7 +16,7 @@
 
 ```bash
 ssh root@77.42.4.230 'systemctl disable --now mmo-server nginx || true'
-ssh root@77.42.4.230 'mkdir -p /srv/mmo/data /srv/mmo/certbot-www && cp /srv/mmo/server/game.db /srv/mmo/data/game.db && cp /srv/mmo/server/game.db /root/game.db.$(date +%F-%H%M).bak'
+ssh root@77.42.4.230 'mkdir -p /srv/mmo/data /srv/mmo/letsencrypt && cp /srv/mmo/server/game.db /srv/mmo/data/game.db && cp /srv/mmo/server/game.db /root/game.db.bak'
 ```
 
 Июльские аккаунты сохранятся: миграции идемпотентны, ники без секрета заклеймятся при первом входе владельца.
@@ -25,42 +24,29 @@ ssh root@77.42.4.230 'mkdir -p /srv/mmo/data /srv/mmo/certbot-www && cp /srv/mmo
 ## 2. Конфигурация .env (один раз)
 
 ```bash
-ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker && cp .env.example .env && sed -i "s/DOMAIN=example.com/DOMAIN=<домен>/" .env && sed -i "s/ADMIN_TOKEN=change-me/ADMIN_TOKEN=$(openssl rand -hex 32)/" .env && chmod 600 .env && cat .env'
+ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker && cp .env.example .env && sed -i "s/DOMAIN=example.com/DOMAIN=mmo.expw.net/" .env && sed -i "s/you@example.com/<твой-email>/" .env && sed -i "s/ADMIN_TOKEN=change-me/ADMIN_TOKEN=$(openssl rand -hex 32)/" .env && chmod 600 .env && grep ADMIN_TOKEN .env'
 ```
 
-(`ADMIN_TOKEN` из вывода — сохранить себе, это вход в `/admin/`.) Если `.env` уже есть от прошлого выката — просто проверить `DOMAIN`.
+`ADMIN_TOKEN` из вывода — сохранить себе (вход в `/admin/`). Если `.env` уже есть — только проверить `DOMAIN` и `ACME_EMAIL`.
 
-## 3. Первый выкат кода (с этой машины, из корня репо)
+## 3. Выкат (с этой машины, из корня репо)
 
 ```bash
 ./deploy/deploy.sh root@77.42.4.230
 ```
 
-Скрипт: `git archive HEAD` → `/srv/mmo` → `docker compose build` → `up -d` → проверка `/healthz` на localhost.
+Скрипт: `git archive HEAD` → `/srv/mmo` → `docker compose build` → `up -d` → healthz на localhost.
+Первая сборка ~3–5 мин. **TLS выпустится сам** при первом обращении к `https://mmo.expw.net` (Traefik ACME, может занять до минуты после подъёма).
+
 Клиент и сервер версионируются вместе (`PROTOCOL_VERSION=4`): старые вкладки получат «Обновите страницу» — штатно.
 
-## 4. TLS: первый выпуск сертификата (один раз)
-
-Nginx не стартует с `mmo.conf.template`, пока сертификата нет (ssl_* пути). Поэтому первый раз — bootstrap-конфиг:
+## 4. Проверка
 
 ```bash
-# на хосте: оставить только bootstrap, поднять nginx на 80-м
-ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker/nginx/templates && mv mmo.conf.template mmo.conf.disabled && cd ../.. && cd deploy/docker && docker compose up -d nginx'
-
-# выпуск через webroot (порт 80 занят nginx-контейнером, webroot смонтирован)
-ssh root@77.42.4.230 'certbot certonly --webroot -w /srv/mmo/certbot-www -d <домен> --agree-tos -m <email>'
-
-# вернуть прод-конфиг и перезапустить стек
-ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker/nginx/templates && mv mmo.conf.disabled mmo.conf.template && rm -f bootstrap.conf.template && cd ../.. && cd deploy/docker && docker compose up -d'
+curl -s https://mmo.expw.net/healthz   # {"status":"ok","players":0,...}
 ```
 
-Проверка: `https://<домен>/healthz` → `{"status":"ok",...}`; `https://<домен>/admin/` → страница логина админки.
-
-Продление: certbot renew по таймеру хоста через тот же webroot; чтобы nginx подхватывал свежий сертификат, добавить hook (один раз):
-
-```bash
-ssh root@77.42.4.230 'mkdir -p /etc/letsencrypt/renewal-hooks/deploy && printf "#!/bin/sh\ndocker exec mmo-nginx nginx -s reload\n" > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh && chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh'
-```
+Игра: `https://mmo.expw.net`. Админка: `https://mmo.expw.net/admin/` (токен из `.env`).
 
 ## 5. Закрыть игровой порт наружу
 
@@ -68,7 +54,7 @@ ssh root@77.42.4.230 'mkdir -p /etc/letsencrypt/renewal-hooks/deploy && printf "
 ssh root@77.42.4.230 'ufw delete allow 2567 || true; ufw allow 80; ufw allow 443; ufw enable; ufw status'
 ```
 
-Остаются: 22 (ssh), 80 (редирект+webroot), 443 (игра). 2567 слушает только localhost хоста.
+Остаются: 22 (ssh), 80 (редирект на https + ACME), 443 (игра). 2567 слушает только localhost хоста.
 
 ## 6. Каждый следующий деплой
 
@@ -76,18 +62,23 @@ ssh root@77.42.4.230 'ufw delete allow 2567 || true; ufw allow 80; ufw allow 443
 ./deploy/deploy.sh root@77.42.4.230
 ```
 
+## Как устроен роутинг (traefik labels в docker-compose.yml)
+
+- `Host(mmo.expw.net)` + `Upgrade: websocket` → `mmo-server:2567` (игровое WS-соединение)
+- `Host(...)` + `/matchmake|/healthz|/admin/api` → `mmo-server:2567` (API)
+- всё остальное на хосте → `mmo-web:80` (статика клиента и админки)
+- 80-й порт → редирект на 443; сертификаты — `/srv/mmo/letsencrypt/acme.json`, продление автоматическое
+
 ## Операционка
 
-- Логи: `ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker && docker compose logs -f'` (или `-f server`/`nginx`).
+- Логи: `ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker && docker compose logs -f'` (или `logs -f server` / `traefik`).
 - Статус: `docker compose ps` там же; healthz хоста: `curl http://127.0.0.1:2567/healthz`.
 - Бэкап БД: `ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker && docker compose stop server && cp /srv/mmo/data/game.db /root/game.db.$(date +%F-%H%M).bak && docker compose start server'`.
-- Админка: `https://<домен>/admin/`, токен в `/srv/mmo/deploy/docker/.env`.
 - Откат: вернуть `game.db` из бэкапа в `/srv/mmo/data/`, локально `git checkout <старый-sha>`, `./deploy/deploy.sh ...`.
 
 ## Структура deploy/docker
 
 - `Dockerfile` — образ игрового сервера (node:20-slim, prod-зависимости, tsx, USER node).
-- `nginx.Dockerfile` — сборка клиента (Vite) → nginx:alpine со статикой и админкой.
-- `docker-compose.yml` — оба сервиса; `game.db` на хосте в `/srv/mmo/data`.
-- `nginx/templates/` — конфиги nginx (envsubst `${DOMAIN}`); прод — `mmo.conf.template`, `bootstrap.conf.template` — только для первого выпуска certbot.
-- `.env.example` → `.env` — DOMAIN и ADMIN_TOKEN (не коммитится).
+- `nginx.Dockerfile` + `nginx-static.conf` — сборка клиента (Vite) → nginx:alpine со статикой и админкой.
+- `docker-compose.yml` — traefik + web + server; `game.db` на хосте в `/srv/mmo/data`, сертификаты в `/srv/mmo/letsencrypt`.
+- `.env.example` → `.env` — DOMAIN, ACME_EMAIL, ADMIN_TOKEN (не коммитится).

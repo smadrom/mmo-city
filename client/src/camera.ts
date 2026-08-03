@@ -17,6 +17,7 @@ export function updateCamera(
   aiming: boolean,
   dt: number,
   colliders: AABB[] = [], // Task 7 передаёт здания; пусто — без коллизии
+  roll = 0,
 ): void {
   let d = dist;
   if (colliders.length > 0) {
@@ -32,6 +33,7 @@ export function updateCamera(
   }
   camera.position.set(x + Math.sin(yaw) * d, CAM_HEIGHT, z + Math.cos(yaw) * d);
   camera.lookAt(x, 1.5, z);
+  if (roll) camera.rotateZ(roll); // крен в повороте машины
   // прицел (ПКМ) сужает FOV, отпустил — вернулся
   const target = aiming ? FOV_AIM : FOV_NORMAL;
   if (Math.abs(camera.fov - target) > 0.1) {

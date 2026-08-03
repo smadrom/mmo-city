@@ -17,6 +17,7 @@ import { TabList } from './tablist.js';
 import { TouchControls } from './touch.js';
 import { t, setLang, getLang, applyStatic } from './i18n/index.js';
 import type { Room } from 'colyseus.js';
+import { CAR_MAX_SPEED } from '@mmo/shared';
 
 applyStatic(); // статика экрана входа — сразу на языке пользователя
 
@@ -115,6 +116,7 @@ function bootGame(room: Room): void {
   let current = room;
   let lastCarId = '';
   let camDist = 7;
+  let camSmX = 0, camSmZ = 0, camInit = false, camShake = 0, lastOwnSpeed = 0;
   let reconnecting = false;
 
   // зум колёсиком — только когда не открыта карта/телефон и не печатаем
@@ -249,7 +251,25 @@ function bootGame(room: Room): void {
       avatars.selfCarPos = predicted && me.mode === 'car' && prediction.car
         ? { x: prediction.car.x, z: prediction.car.z, rotY: prediction.car.rotY }
         : null;
-      updateCamera(camera, avatars.selfCarPos?.x ?? avatars.selfPos?.x ?? me.x, avatars.selfCarPos?.z ?? avatars.selfPos?.z ?? me.z, input.yaw, camDist, input.aiming && document.pointerLockElement !== null, dt, camColliders);
+      const targetX = avatars.selfCarPos?.x ?? avatars.selfPos?.x ?? me.x;
+      const targetZ = avatars.selfCarPos?.z ?? avatars.selfPos?.z ?? me.z;
+      if (!camInit) { camSmX = targetX; camSmZ = targetZ; camInit = true; }
+      const inCar = me.mode === 'car';
+      // пружинный лаг камеры: в машине мягче, пешком цепче
+      const k = Math.min(1, dt * (inCar ? 5 : 10));
+      camSmX += (targetX - camSmX) * k;
+      camSmZ += (targetZ - camSmZ) * k;
+      // тряска при резкой потере скорости (столкновение/наезд по мне)
+      const ownSpeed = inCar && ownCar ? Math.abs(ownCar.speed) : 0;
+      if (lastOwnSpeed - ownSpeed > 8) camShake = 0.5;
+      lastOwnSpeed = ownSpeed;
+      camShake = Math.max(0, camShake - dt * 1.5);
+      const shakeX = camShake ? (Math.random() - 0.5) * camShake : 0;
+      const shakeZ = camShake ? (Math.random() - 0.5) * camShake : 0;
+      const speedBoost = inCar && ownCar ? Math.abs(ownCar.speed) / CAR_MAX_SPEED * 3 : 0;
+      const steer = inCar && ownCar ? ownCar.steer : 0;
+      const roll = inCar && ownCar ? -steer * (Math.abs(ownCar.speed) / CAR_MAX_SPEED) * 0.06 : 0;
+      updateCamera(camera, camSmX + shakeX, camSmZ + shakeZ, input.yaw, camDist + speedBoost, input.aiming && document.pointerLockElement !== null, dt, camColliders, roll);
     }
     avatars.update(dt);
     effects.update(me ?? undefined);

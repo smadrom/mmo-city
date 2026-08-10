@@ -18,7 +18,6 @@ describe('GameDB', () => {
     db = new GameDB(':memory:');
     const rec = db.load('alice');
     expect(rec).toMatchObject({ name: 'alice', cash: START_CASH, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 });
-    expect(rec.secret).toBeTruthy(); // новый аккаунт получает секрет
   });
 
   it('save/load сохраняет прогресс, включая оружие', () => {
@@ -122,25 +121,6 @@ describe('GameDB', () => {
     db.load('alice');
     expect(db.hasPlayer('alice')).toBe(true);
     expect(db.hasPlayer('ghost')).toBe(false);
-  });
-
-  it('auth: новый аккаунт получает секрет; getAuth совпадает; чужой ник свободен', () => {
-    db = new GameDB(':memory:');
-    const rec = db.load('neo');
-    expect(rec.secret).toBeTruthy();
-    const auth = db.getAuth('neo');
-    expect(auth.exists).toBe(true);
-    expect(auth.secret).toBe(rec.secret);
-    expect(db.getAuth('nobody')).toEqual({ exists: false, secret: '' });
-  });
-
-  it('email: bindEmail/getByEmail roundtrip, неизвестный → null', () => {
-    db = new GameDB(':memory:');
-    db.load('neo');
-    expect(db.getByEmail('neo@example.com')).toBeNull();
-    db.bindEmail('neo', 'neo@example.com', 'salt:hash');
-    expect(db.getByEmail('neo@example.com')).toEqual({ name: 'neo', passhash: 'salt:hash' });
-    expect(db.getByEmail('')).toBeNull(); // пустой email не должен совпасть с непривязанными аккаунтами
   });
 
   it('rent_due: setRentDue/getRentDue персистятся, дефолт 0', () => {

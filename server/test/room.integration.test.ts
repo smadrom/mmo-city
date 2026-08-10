@@ -4,6 +4,7 @@ import { Server } from 'colyseus';
 import { createCityMap, CAR_ENTER_DIST, ZOMBIE_COUNT, PUNCH_DAMAGE, PROTOCOL_VERSION } from '@mmo/shared';
 import { CityRoom } from '../src/rooms/CityRoom.js';
 import type { GameState } from '../src/schema/GameState.js';
+import { joinWithChar, onceMessage } from './helpers.js';
 
 describe('CityRoom (integration)', () => {
   let testServer: ColyseusTestServer;
@@ -21,7 +22,7 @@ describe('CityRoom (integration)', () => {
 
   it('игрок заходит и появляется в состоянии комнаты', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const client = await testServer.connectTo(room, { name: 'int1', role: 'citizen' });
+    const client = await joinWithChar(testServer, room, 'int1', 'citizen');
     expect(room.state.players.size).toBe(1 + ZOMBIE_COUNT); // 20 зомби спавнятся в onCreate
     const p = room.state.players.get(client.sessionId);
     expect(p.name).toBe('int1');
@@ -31,7 +32,7 @@ describe('CityRoom (integration)', () => {
   it('ввод двигает игрока', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     room.state.players.forEach((p: any) => { if (p.role === 'zombie') { p.x = 190; p.z = 190; } }); // отгоняем зомби
-    const client = await testServer.connectTo(room, { name: 'int2', role: 'citizen' });
+    const client = await joinWithChar(testServer, room, 'int2', 'citizen');
     const before = room.state.players.get(client.sessionId).z;
     client.send('input', { up: true, down: false, left: false, right: false, sprint: false, rotY: 0 });
     await new Promise(r => setTimeout(r, 500));
@@ -41,7 +42,7 @@ describe('CityRoom (integration)', () => {
 
   it('битое input-сообщение не роняет комнату', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const client = await testServer.connectTo(room, { name: 'int3', role: 'citizen' });
+    const client = await joinWithChar(testServer, room, 'int3', 'citizen');
     client.send('input');
     await new Promise(r => setTimeout(r, 200));
     expect(room.state.players.has(client.sessionId)).toBe(true);
@@ -49,21 +50,24 @@ describe('CityRoom (integration)', () => {
 
   it('input с rotY=Infinity отбрасывается в конечное значение', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const client = await testServer.connectTo(room, { name: 'rotbad', role: 'citizen' });
+    const client = await joinWithChar(testServer, room, 'rotbad', 'citizen');
     client.send('input', { up: true, down: false, left: false, right: false, sprint: false, rotY: Infinity });
     await new Promise(r => setTimeout(r, 200));
     const p = room.state.players.get(client.sessionId);
     expect(Number.isFinite(p.rotY)).toBe(true);
   });
 
-  it('лимит копов: 21-й коп становится гражданином', async () => {
+  it('лимит копов: 21-й коп отклоняется лобби (cop_full)', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const clients = [];
-    for (let i = 0; i < 21; i++) {
-      clients.push(await testServer.connectTo(room, { name: `cop${i}`, role: 'cop' }));
+    for (let i = 0; i < 20; i++) {
+      await joinWithChar(testServer, room, `cop${i}`, 'cop');
     }
-    const roles = new Set<string>();
-    room.state.players.forEach((p: any) => roles.add(p.role));
+    // 21-й коп: создание копа в лобби отклоняется, спавна нет
+    const c = await testServer.connectTo(room, { email: 'cop20@t.local', password: 'pw1234', ver: PROTOCOL_VERSION });
+    const err = onceMessage<{ code: string }>(c, 'lobbyError');
+    c.send('createChar', { name: 'cop20', role: 'cop' });
+    expect((await err).code).toBe('cop_full');
+    expect(room.state.players.get(c.sessionId)).toBeUndefined();
     let cops = 0;
     room.state.players.forEach((p: any) => { if (p.role === 'cop') cops++; });
     expect(cops).toBe(20);
@@ -72,7 +76,7 @@ describe('CityRoom (integration)', () => {
   it('вход в машину через interact у парковки', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     room.state.players.forEach((p: any) => { if (p.role === 'zombie') { p.x = 190; p.z = 190; } }); // отгоняем зомби
-    const client = await testServer.connectTo(room, { name: 'driver1', role: 'citizen' });
+    const client = await joinWithChar(testServer, room, 'driver1', 'citizen');
     const spot = createCityMap().parkingSpots[0];
     const p = room.state.players.get(client.sessionId);
     // ставим игрока к первому парковочному месту, в пределах CAR_ENTER_DIST
@@ -87,22 +91,19 @@ describe('CityRoom (integration)', () => {
   it('кэш переживает переподключение с тем же ником', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     // якорный клиент держит комнату (и её in-memory БД) живой между подключениями
-    await testServer.connectTo(room, { name: 'anchor', role: 'citizen' });
-    const c1 = await testServer.connectTo(room, { name: 'persist1', role: 'citizen' });
-    let tok = '';
-    c1.onMessage('authToken', (m: any) => { tok = m.token; });
-    await new Promise(r => setTimeout(r, 150));
+    await joinWithChar(testServer, room, 'anchor', 'citizen');
+    const c1 = await joinWithChar(testServer, room, 'persist1', 'citizen');
     room.state.players.get(c1.sessionId).cash = 1234;
     await c1.leave();
     await new Promise(r => setTimeout(r, 200));
     expect(room.state.players.has(c1.sessionId)).toBe(false);
-    const c2 = await testServer.connectTo(room, { name: 'persist1', role: 'citizen', token: tok });
+    const c2 = await joinWithChar(testServer, room, 'persist1'); // тот же email → selectChar
     expect(room.state.players.get(c2.sessionId).cash).toBe(1234);
   });
 
   it('покупка оружия через buyWeapon у магазина', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const client = await testServer.connectTo(room, { name: 'shoper', role: 'citizen' });
+    const client = await joinWithChar(testServer, room, 'shoper', 'citizen');
     const p = room.state.players.get(client.sessionId);
     const shop = createCityMap().gunShop;
     p.x = shop.x;
@@ -119,7 +120,7 @@ describe('CityRoom (integration)', () => {
 
   it('interact у магазина шлёт openShop', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const client = await testServer.connectTo(room, { name: 'shoper2', role: 'citizen' });
+    const client = await joinWithChar(testServer, room, 'shoper2', 'citizen');
     const p = room.state.players.get(client.sessionId);
     const shop = createCityMap().gunShop;
     p.x = shop.x;
@@ -134,8 +135,8 @@ describe('CityRoom (integration)', () => {
   it('выстрел через attack: урон жертве и broadcast shot', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     room.state.players.forEach((p: any) => { if (p.role === 'zombie') { p.x = 190; p.z = 190; } }); // отгоняем зомби
-    const shooter = await testServer.connectTo(room, { name: 'sh1', role: 'citizen' });
-    const victim = await testServer.connectTo(room, { name: 'v1', role: 'citizen' });
+    const shooter = await joinWithChar(testServer, room, 'sh1', 'citizen');
+    const victim = await joinWithChar(testServer, room, 'v1', 'citizen');
     const ps = room.state.players.get(shooter.sessionId);
     const pv = room.state.players.get(victim.sessionId);
     // открытая местность без зданий (середина дороги), стрелок смотрит в -z
@@ -152,7 +153,7 @@ describe('CityRoom (integration)', () => {
 
   it('сдача груза шлёт адресное delivered, выстрел — hit с attacker', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'dl1', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'dl1', 'citizen');
     // delivered: проставить груз вручную и подвезти к точке
     const p = room.state.players.get(c1.sessionId);
     p.mode = 'car';
@@ -182,8 +183,8 @@ describe('CityRoom (integration)', () => {
   it('удар кулаком: broadcast hit жертве и swing всем', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     room.state.players.forEach((p: any) => { if (p.role === 'zombie') { p.x = 190; p.z = 190; } }); // отгоняем зомби
-    const c1 = await testServer.connectTo(room, { name: 'boxer', role: 'citizen' });
-    const c2 = await testServer.connectTo(room, { name: 'target', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'boxer', 'citizen');
+    const c2 = await joinWithChar(testServer, room, 'target', 'citizen');
     const p1 = room.state.players.get(c1.sessionId);
     const p2 = room.state.players.get(c2.sessionId);
     p1.x = 0; p1.z = 0; p1.rotY = 0;
@@ -203,7 +204,7 @@ describe('CityRoom (integration)', () => {
   it('пикап подбирается на сервере: игрок на точке получает оружие', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     room.state.players.forEach((p: any) => { if (p.role === 'zombie') { p.x = 190; p.z = 190; } }); // отгоняем зомби
-    const client = await testServer.connectTo(room, { name: 'lucky', role: 'citizen' });
+    const client = await joinWithChar(testServer, room, 'lucky', 'citizen');
     const p = room.state.players.get(client.sessionId);
     const pk = [...room.state.pickups.values()][0] as any;
     pk.kind = 'rifle';
@@ -215,8 +216,8 @@ describe('CityRoom (integration)', () => {
 
   it('чат: сообщение доставляется другим игрокам (и отправителю-эхом)', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'chatter1', role: 'citizen' });
-    const c2 = await testServer.connectTo(room, { name: 'chatter2', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'chatter1', 'citizen');
+    const c2 = await joinWithChar(testServer, room, 'chatter2', 'citizen');
     const got: any[] = [];
     c1.onMessage('chat', (m) => got.push(m)); // эхо отправителю
     c2.onMessage('chat', (m) => got.push(m));
@@ -229,11 +230,11 @@ describe('CityRoom (integration)', () => {
 
   it('чат: история по запросу chatHistoryReq', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'old1', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'old1', 'citizen');
     c1.onMessage('chat', () => {}); // гасим warning о неподписанном сообщении
     c1.send('chat', { text: 'раннее сообщение' });
     await new Promise(r => setTimeout(r, 200));
-    const c2 = await testServer.connectTo(room, { name: 'newbie1', role: 'citizen' });
+    const c2 = await joinWithChar(testServer, room, 'newbie1', 'citizen');
     let history: any = null;
     c2.onMessage('chatHistory', (msg) => { history = msg; });
     c2.send('chatHistoryReq');
@@ -244,8 +245,8 @@ describe('CityRoom (integration)', () => {
 
   it('чат: антиспам и пустое сообщение молча отсекаются', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'spammer', role: 'citizen' });
-    const c2 = await testServer.connectTo(room, { name: 'listener', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'spammer', 'citizen');
+    const c2 = await joinWithChar(testServer, room, 'listener', 'citizen');
     const got: any[] = [];
     c1.onMessage('chat', (m) => got.push(m));
     c2.onMessage('chat', (m) => got.push(m));
@@ -259,7 +260,7 @@ describe('CityRoom (integration)', () => {
 
   it('чат: повторный chatHistoryReq в пределах 5 сек молча игнорируется', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'histspam', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'histspam', 'citizen');
     let count = 0;
     c1.onMessage('chatHistory', () => { count++; });
     c1.send('chatHistoryReq');
@@ -270,7 +271,7 @@ describe('CityRoom (integration)', () => {
 
   it('чат: буфер истории держит последние 20 (21-е вытесняет первое)', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'hist1', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'hist1', 'citizen');
     c1.onMessage('chat', () => {}); // гасим warning о неподписанном типе
     for (let i = 1; i <= 21; i++) {
       (room as any).runtimes.get(c1.sessionId).lastChatAt = -10_000; // обход антиспама ради скорости теста
@@ -288,8 +289,8 @@ describe('CityRoom (integration)', () => {
 
   it('приватные поля видит только владелец (@view)', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const a = await testServer.connectTo(room, { name: 'viewA', role: 'citizen' });
-    const b = await testServer.connectTo(room, { name: 'viewB', role: 'citizen' });
+    const a = await joinWithChar(testServer, room, 'viewA', 'citizen');
+    const b = await joinWithChar(testServer, room, 'viewB', 'citizen');
     // серверная авторитетная величина
     room.state.players.get(a.sessionId).cash = 999;
     room.state.players.get(a.sessionId).ammo = 42;
@@ -306,60 +307,37 @@ describe('CityRoom (integration)', () => {
     expect(otherOnA.name).toBe('viewB');
   });
 
-  it('auth: чужой под тем же ником без токена отклоняется, с токеном — проходит', async () => {
-    const room = await testServer.createRoom<GameState>('city') as any;
-    await testServer.connectTo(room, { name: 'anchorAuth', role: 'citizen' }); // держит комнату/БД
-    const owner = await testServer.connectTo(room, { name: 'acc1', role: 'citizen' });
-    let tok = '';
-    owner.onMessage('authToken', (m: any) => { tok = m.token; });
-    await new Promise(r => setTimeout(r, 150));
-    expect(tok).toBeTruthy();
-    await owner.leave();
-    await new Promise(r => setTimeout(r, 200));
-    // без токена — отказ (ник заклеймён)
-    await expect(testServer.connectTo(room, { name: 'acc1', role: 'citizen' })).rejects.toThrow();
-    // с верным токеном — успех
-    const back = await testServer.connectTo(room, { name: 'acc1', role: 'citizen', token: tok });
-    expect(room.state.players.get(back.sessionId).name).toBe('acc1');
-  });
-
   it('рента переживает релог: nextRentAt восстанавливается из БД', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    await testServer.connectTo(room, { name: 'anchorRent', role: 'citizen' });
-    const c1 = await testServer.connectTo(room, { name: 'tenant', role: 'citizen' });
-    let tok = '';
-    c1.onMessage('authToken', (m: any) => { tok = m.token; });
-    await new Promise(r => setTimeout(r, 150));
+    await joinWithChar(testServer, room, 'anchorRent', 'citizen');
+    const c1 = await joinWithChar(testServer, room, 'tenant', 'citizen');
     (room as any).runtimes.get(c1.sessionId).nextRentAt = 1000; // срок ренты «в прошлом»
     (room as any).savePlayer(c1.sessionId);
     await c1.leave();
     await new Promise(r => setTimeout(r, 200));
-    const c2 = await testServer.connectTo(room, { name: 'tenant', role: 'citizen', token: tok });
+    const c2 = await joinWithChar(testServer, room, 'tenant'); // тот же email → selectChar
     expect((room as any).runtimes.get(c2.sessionId).nextRentAt).toBe(1000); // не сброшен релогом
   });
 
   it('версия протокола: несовпадающий ver отклоняется, текущий — проходит', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    await testServer.connectTo(room, { name: 'verAnchor', role: 'citizen' }); // держит комнату (иначе autoDispose)
-    await expect(testServer.connectTo(room, { name: 'verbad', role: 'citizen', ver: 999 })).rejects.toThrow();
-    const ok = await testServer.connectTo(room, { name: 'vergood', role: 'citizen', ver: PROTOCOL_VERSION });
+    await joinWithChar(testServer, room, 'verAnchor', 'citizen'); // держит комнату (иначе autoDispose)
+    await expect(testServer.connectTo(room, { email: 'verbad@t.local', password: 'pw1234', ver: 999 })).rejects.toThrow();
+    const ok = await joinWithChar(testServer, room, 'vergood');
     expect(room.state.players.get(ok.sessionId).name).toBe('vergood');
   });
 
-  it('дубль активного ника отклоняется (один сеанс на аккаунт)', async () => {
+  it('второй одновременный вход аккаунта отклоняется (account_online)', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'dup', role: 'citizen' });
-    let tok = '';
-    c1.onMessage('authToken', (m: any) => { tok = m.token; });
-    await new Promise(r => setTimeout(r, 150));
-    // c1 всё ещё онлайн → второй вход тем же ником (даже с токеном) отклоняется
-    await expect(testServer.connectTo(room, { name: 'dup', role: 'citizen', token: tok })).rejects.toThrow();
+    await joinWithChar(testServer, room, 'dup', 'citizen');
+    // аккаунт всё ещё онлайн → второй вход тем же email отклоняется
+    await expect(testServer.connectTo(room, { email: 'dup@t.local', password: 'pw1234', ver: PROTOCOL_VERSION })).rejects.toThrow(/account_online/);
   });
 
   it('призрак замораживается при обрыве: не двигается в окне реконнекта', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    await testServer.connectTo(room, { name: 'ghostAnchor', role: 'citizen' }); // держит комнату
-    const c = await testServer.connectTo(room, { name: 'ghost1', role: 'citizen' });
+    await joinWithChar(testServer, room, 'ghostAnchor', 'citizen'); // держит комнату
+    const c = await joinWithChar(testServer, room, 'ghost1', 'citizen');
     const id = c.sessionId;
     const p = room.state.players.get(id);
     p.x = 190; p.z = 190; // подальше от зомби/копов
@@ -374,7 +352,7 @@ describe('CityRoom (integration)', () => {
 
   it('ping отвечает pong с тем же payload', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'pinger', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'pinger', 'citizen');
     let got: any = null;
     c1.onMessage('pong', (m) => { got = m; });
     c1.send('ping', { t: 12345 });
@@ -384,10 +362,10 @@ describe('CityRoom (integration)', () => {
 
   it('sys: вход/выход игрока рассылается всем', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'watcher', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'watcher', 'citizen');
     const msgs: any[] = [];
     c1.onMessage('sys', (m) => msgs.push(m));
-    const c2 = await testServer.connectTo(room, { name: 'joiner', role: 'citizen' });
+    const c2 = await joinWithChar(testServer, room, 'joiner', 'citizen');
     await new Promise(r => setTimeout(r, 200));
     expect(msgs.some(m => m.code === 'join' && m.name === 'joiner')).toBe(true);
     await c2.leave(); // consented → onLeave кидает в catch → removePlayer сразу, окно реконнекта не ждём
@@ -397,7 +375,7 @@ describe('CityRoom (integration)', () => {
 
   it('kickByName дисконнектит игрока (admin)', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c = await testServer.connectTo(room, { name: 'kickme', role: 'citizen' });
+    const c = await joinWithChar(testServer, room, 'kickme', 'citizen');
     expect((room as any).kickByName('kickme')).toBe(true);
     await new Promise(r => setTimeout(r, 300));
     expect(room.state.players.has(c.sessionId)).toBe(false);

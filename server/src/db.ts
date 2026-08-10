@@ -1,5 +1,4 @@
 import Database from 'better-sqlite3';
-import { randomUUID } from 'node:crypto';
 import { START_CASH } from '@mmo/shared';
 
 export interface PlayerRecord {
@@ -11,8 +10,6 @@ export interface PlayerRecord {
   deaths: number;
   weapon: string;
   ammo: number;
-  secret?: string; // токен владельца аккаунта (не попадает в реплицируемое состояние)
-  email?: string; // привязанная почта ('' = не привязана); перезапись запрещена
   playtimeSec?: number; // наигрыш в секундах (колонка playtime_sec); антимультиаккаунт
 }
 
@@ -110,37 +107,13 @@ export class GameDB {
 
   load(name: string): PlayerRecord {
     const row = this.db.prepare('SELECT * FROM players WHERE name = ?').get(name) as PlayerRecord | undefined;
-    if (row) {
-      if (!row.secret) { // аккаунт из старой БД (до auth) — клеймим секретом при первом входе
-        row.secret = randomUUID();
-        this.db.prepare('UPDATE players SET secret = ? WHERE name = ?').run(row.secret, name);
-      }
-      return row;
-    }
-    const rec: PlayerRecord = { name, cash: START_CASH, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0, secret: randomUUID() };
+    if (row) return row;
+    const rec: PlayerRecord = { name, cash: START_CASH, safe: 0, apt: '', kills: 0, deaths: 0, weapon: '', ammo: 0 };
     this.db.prepare(`
-      INSERT INTO players (name, cash, safe, apt, kills, deaths, weapon, ammo, secret)
-      VALUES (@name, @cash, @safe, @apt, @kills, @deaths, @weapon, @ammo, @secret)
+      INSERT INTO players (name, cash, safe, apt, kills, deaths, weapon, ammo)
+      VALUES (@name, @cash, @safe, @apt, @kills, @deaths, @weapon, @ammo)
     `).run(rec);
     return rec;
-  }
-
-  // { exists, secret } для аутентификации; secret '' = аккаунт ещё не заклеймён (можно занять)
-  getAuth(name: string): { exists: boolean; secret: string } {
-    const row = this.db.prepare('SELECT secret FROM players WHERE name = ?').get(name) as { secret: string } | undefined;
-    return { exists: !!row, secret: row?.secret ?? '' };
-  }
-
-  // привязка email к аккаунту; перезапись запрещена — проверка «ещё не привязан» наверху, в onJoin
-  bindEmail(name: string, email: string, passhash: string): void {
-    this.db.prepare('UPDATE players SET email = ?, passhash = ? WHERE name = ?').run(email, passhash, name);
-  }
-
-  // вход по email: сервер восстанавливает ник и сверяет пароль
-  getByEmail(email: string): { name: string; passhash: string } | null {
-    if (!email) return null; // '' — дефолт непривязанных аккаунтов, не должен совпадать
-    const row = this.db.prepare('SELECT name, passhash FROM players WHERE email = ?').get(email) as { name: string; passhash: string } | undefined;
-    return row ?? null;
   }
 
   // --- аккаунты и персонажи (обязательная email-регистрация) ---

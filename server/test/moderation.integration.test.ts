@@ -3,6 +3,7 @@ import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Server } from 'colyseus';
 import { CityRoom } from '../src/rooms/CityRoom.js';
 import type { GameState } from '../src/schema/GameState.js';
+import { joinWithChar } from './helpers.js';
 
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -22,8 +23,8 @@ describe('модерация: мут/автомут/цензура (integration)
 
   it('мут блокирует чат: сообщение не рассылается, приходит notice', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'muted1', role: 'citizen' });
-    const c2 = await testServer.connectTo(room, { name: 'listen1', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'muted1', 'citizen');
+    const c2 = await joinWithChar(testServer, room, 'listen1', 'citizen');
     (room as any).db.mute('muted1', Date.now() + 60_000, 'тест');
     const got: any[] = [];
     let notice: any = null;
@@ -39,8 +40,8 @@ describe('модерация: мут/автомут/цензура (integration)
 
   it('мут блокирует SMS: smsResult error=muted', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'muted2', role: 'citizen' });
-    await testServer.connectTo(room, { name: 'smspeer', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'muted2', 'citizen');
+    await joinWithChar(testServer, room, 'smspeer', 'citizen');
     (room as any).db.mute('muted2', Date.now() + 60_000, 'тест');
     let result: any = null;
     c1.onMessage('smsResult', (m) => { result = m; });
@@ -51,7 +52,7 @@ describe('модерация: мут/автомут/цензура (integration)
 
   it('автомут: 5 срабатываний чат-кулдауна за минуту → мут на 10 мин', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'flooder', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'flooder', 'citizen');
     c1.onMessage('chat', () => {}); // гасим warning
     for (let i = 0; i < 6; i++) {
       c1.send('chat', { text: `флуд ${i}` }); // первое проходит, 5 следующих — кулдаун
@@ -65,7 +66,7 @@ describe('модерация: мут/автомут/цензура (integration)
 
   it('цензура: мат в чате уходит замаскированным', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'rude1', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'rude1', 'citizen');
     const got: any[] = [];
     c1.onMessage('chat', (m) => got.push(m));
     c1.send('chat', { text: 'сука, опять лаги' });
@@ -75,8 +76,8 @@ describe('модерация: мут/автомут/цензура (integration)
 
   it('цензура: мат в SMS маскируется до записи в БД', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'rude2', role: 'citizen' });
-    await testServer.connectTo(room, { name: 'rude3', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'rude2', 'citizen');
+    await joinWithChar(testServer, room, 'rude3', 'citizen');
     c1.onMessage('smsResult', () => {});
     c1.send('sms', { to: 'rude3', text: 'ты мудак' });
     await wait(200);

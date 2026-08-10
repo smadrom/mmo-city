@@ -3,7 +3,7 @@ import { StateView } from '@colyseus/schema';
 import {
   TICK_RATE, MAX_PLAYERS, COP_LIMIT, DELIVERY_PICKUP_DIST, DOOR_DIST, CHAT_HISTORY, CHAT_HISTORY_COOLDOWN_MS,
   SMS_HISTORY_COOLDOWN_MS, SMS_THREAD_LIMIT, TRANSFER_HISTORY, RENT_INTERVAL_MS, WRITE_COOLDOWN_MS, PROTOCOL_VERSION,
-  CHAT_MAX_LEN, CHAT_COOLDOWN_MS, AUTOMUTE_VIOLATIONS, AUTOMUTE_WINDOW_MS, AUTOMUTE_MINUTES,
+  CHAT_MAX_LEN, CHAT_COOLDOWN_MS, AUTOMUTE_VIOLATIONS, AUTOMUTE_WINDOW_MS, AUTOMUTE_MINUTES, CHARACTER_LIMIT,
   createCityMap, dist2, type AABB, type CityMap,
 } from '@mmo/shared';
 import { GameState, Player, Car, Apartment } from '../schema/GameState.js';
@@ -84,6 +84,7 @@ export class CityRoom extends Room<GameState> {
       };
     });
     this.onMessage('attack', (client) => {
+      if (!this.state.players.get(client.sessionId)) return; // лобби не атакует
       const events: KillEvent[] = [];
       const res = handleAttack(this.state, this.runtimes, client.sessionId, Date.now(), this.colliders, this.map.safeZones, events);
       this.broadcastAttack(res);
@@ -198,6 +199,42 @@ export class CityRoom extends Room<GameState> {
       client.send('leaderboard', { items: this.db.topByKills(10) });
     });
     this.onMessage('ping', (client, data) => client.send('pong', data)); // эхо для RTT-метрики клиента (F3)
+    // --- лобби персонажей (только пока у клиента нет Player в state) ---
+    this.onMessage('createChar', (client, data) => {
+      if (this.state.players.get(client.sessionId)) return;
+      const auth = client.auth as { email: string };
+      const name = String(data?.name ?? '').trim().slice(0, 16);
+      const role = String(data?.role ?? '');
+      if (!name) return this.lobbyError(client, 'nick_bad');
+      if (role !== 'citizen' && role !== 'cop') return this.lobbyError(client, 'role_bad');
+      if (this.db.countChars(auth.email) >= CHARACTER_LIMIT) return this.lobbyError(client, 'slots_full');
+      const ban = this.db.getActiveBan(name, Date.now()); // бан переживает удаление ника — проверяем и при создании
+      if (ban) return this.lobbyError(client, ban.until === null ? 'banned_perm' : 'banned');
+      if (this.db.getChar(name) || this.db.hasPlayer(name)) return this.lobbyError(client, 'nick_taken');
+      if (role === 'cop' && this.copCount() >= COP_LIMIT) return this.lobbyError(client, 'cop_full');
+      this.db.createChar(auth.email, name, role);
+      this.spawnPlayer(client, { name, role });
+    });
+    this.onMessage('selectChar', (client, data) => {
+      if (this.state.players.get(client.sessionId)) return;
+      const auth = client.auth as { email: string };
+      const name = String(data?.name ?? '').trim().slice(0, 16);
+      const char = this.db.getChar(name);
+      if (!char || char.email !== auth.email) return this.lobbyError(client, 'not_found');
+      const ban = this.db.getActiveBan(name, Date.now());
+      if (ban) return this.lobbyError(client, ban.until === null ? 'banned_perm' : 'banned');
+      if (char.role === 'cop' && this.copCount() >= COP_LIMIT) return this.lobbyError(client, 'cop_full');
+      this.spawnPlayer(client, char);
+    });
+    this.onMessage('deleteChar', (client, data) => {
+      if (this.state.players.get(client.sessionId)) return;
+      const auth = client.auth as { email: string };
+      const name = String(data?.name ?? '').trim().slice(0, 16);
+      const char = this.db.getChar(name);
+      if (!char || char.email !== auth.email) return this.lobbyError(client, 'not_found');
+      this.db.deleteChar(name);
+      this.sendCharList(client); // свежий список после удаления
+    });
     this.onMessage('jobTake', (client) => {
       const rt = this.runtimes.get(client.sessionId);
       if (!rt) return;
@@ -212,62 +249,63 @@ export class CityRoom extends Room<GameState> {
     });
   }
 
-  // аутентификация: ник + секрет-токен, либо email + пароль (ник резолвится из привязки).
-  // Существующий заклеймённый ник требует верный token.
-  onAuth(_client: Client, options: { name?: string; token?: string; ver?: number; email?: string; password?: string }, context?: AuthContext): { name: string; ip: string; bindEmail?: string; bindPass?: string } {
-    // хендшейк версии: присланный, но несовпадающий ver отклоняем (устаревший клиент после бампа схемы)
+  // аутентификация: только email + пароль. Неизвестный email = регистрация на месте
+  // (без подтверждения почты). Ник/токен больше не участвуют (жёсткий срез).
+  onAuth(_client: Client, options: { email?: string; password?: string; ver?: number }, context?: AuthContext): { email: string; ip: string } {
+    // хендшейк версии: присланный, но несовпадающий ver отклоняем
     if (options?.ver !== undefined && options.ver !== PROTOCOL_VERSION) throw new Error('bad_version');
-    // email-ветка — до ник-ветки: известная почта сама восстанавливает ник (options.name игнорируется)
     const email = String(options?.email ?? '').trim().toLowerCase().slice(0, 64);
+    if (!email) throw new Error('need_email');
     const password = String(options?.password ?? '').slice(0, 128);
-    if (email) {
-      const acc = this.db.getByEmail(email);
-      if (acc) {
-        if (!verifyPassword(password, acc.passhash)) throw new Error('bad_password');
-        const existingId = this.findSessionByName(acc.name);
-        if (existingId && !this.runtimes.get(existingId)?.frozen) throw new Error('name_online');
-        const rawIp = context?.ip;
-        const ip = Array.isArray(rawIp) ? (rawIp[0] ?? '') : (rawIp ?? '').split(',')[0].trim();
-        const ban = this.db.getActiveBan(acc.name, Date.now()) ?? this.db.getActiveIpBan(ip, Date.now());
-        if (ban) throw new Error(ban.until === null ? 'banned_perm' : 'banned');
-        return { name: acc.name, ip }; // вход по email: ник восстановлен, токен не нужен
-      }
-      if (password.length < 4) throw new Error('weak_password'); // привязка новой почты — минимум 4
-    }
-    const name = String(options?.name ?? '').slice(0, 16);
-    if (!name) throw new Error('need_name');
-    const auth = this.db.getAuth(name);
-    if (auth.exists && auth.secret && options?.token !== auth.secret) throw new Error('bad_token');
-    // один активный сеанс на ник: онлайн-дубль отклоняем. Замороженный призрак — исключение:
-    // это реконнект владельца (токен уже проверен выше), его вытеснит onJoin.
-    const existingId = this.findSessionByName(name);
-    if (existingId && !this.runtimes.get(existingId)?.frozen) throw new Error('name_online');
-    // IP для антифарм-лимита: Colyseus берёт X-Real-IP/X-Forwarded-For (за nginx), иначе сокет; XFF-цепочку режем до клиента
+    // IP для антифарм-лимита/IP-бана: Colyseus берёт X-Real-IP/X-Forwarded-For (за nginx), иначе сокет
     const rawIp = context?.ip;
     const ip = Array.isArray(rawIp) ? (rawIp[0] ?? '') : (rawIp ?? '').split(',')[0].trim();
-    const ban = this.db.getActiveBan(name, Date.now()) ?? this.db.getActiveIpBan(ip, Date.now());
-    if (ban) throw new Error(ban.until === null ? 'banned_perm' : 'banned'); // перманент и временный различаем кодом
-    return { name, ip, ...(email ? { bindEmail: email, bindPass: password } : {}) };
+    const ipBan = this.db.getActiveIpBan(ip, Date.now());
+    if (ipBan) throw new Error(ipBan.until === null ? 'banned_perm' : 'banned');
+    const acc = this.db.getAccount(email);
+    if (acc) {
+      if (!verifyPassword(password, acc.passhash)) throw new Error('bad_password');
+    } else {
+      if (password.length < 4) throw new Error('weak_password'); // регистрация — минимум 4
+      this.db.createAccount(email, hashPassword(password));
+    }
+    // один онлайн на аккаунт; замороженный призрак — реконнект владельца, его вытеснит spawnPlayer
+    for (const c of this.clients) {
+      if ((c.auth as { email?: string } | undefined)?.email === email && !this.runtimes.get(c.sessionId)?.frozen) {
+        throw new Error('account_online');
+      }
+    }
+    return { email, ip };
   }
 
-  onJoin(client: Client, options: { name?: string; role?: string }): void {
-    const name = (client.auth as { name: string }).name;
-    const ghostId = this.findSessionByName(name); // вытесняем «призрака» реконнекта того же ника
+  // лобби: Player НЕ создаётся — клиент получает список персонажей и выбирает/создаёт
+  onJoin(client: Client): void {
+    this.sendCharList(client);
+  }
+
+  private sendCharList(client: Client): void {
+    const email = (client.auth as { email: string }).email;
+    client.send('charList', { chars: this.db.listChars(email), copFull: this.copCount() >= COP_LIMIT });
+  }
+
+  private copCount(): number {
+    let n = 0;
+    this.state.players.forEach(pl => { if (pl.role === 'cop') n++; });
+    return n;
+  }
+
+  private lobbyError(client: Client, code: string): void {
+    client.send('lobbyError', { code });
+  }
+
+  // спавн персонажа: вытеснение призрака того же ника, загрузка прогресса, StateView, runtime
+  private spawnPlayer(client: Client, char: { name: string; role: string }): void {
+    const name = char.name;
+    const ghostId = this.findSessionByName(name);
     if (ghostId) this.removePlayer(ghostId, true); // вытеснение своего призрака — не «вышел»
-    let role: 'citizen' | 'cop' = options?.role === 'cop' ? 'cop' : 'citizen';
-    if (role === 'cop') {
-      let cops = 0;
-      this.state.players.forEach(pl => { if (pl.role === 'cop') cops++; });
-      if (cops >= COP_LIMIT) role = 'citizen';
-    }
+    const role: 'citizen' | 'cop' = char.role === 'cop' ? 'cop' : 'citizen';
     const rec = this.db.load(name);
-    const auth = client.auth as { name: string; ip?: string; bindEmail?: string; bindPass?: string };
-    if (auth.bindEmail && auth.bindPass && !rec.email && !this.db.getByEmail(auth.bindEmail)) {
-      try {
-        this.db.bindEmail(name, auth.bindEmail, hashPassword(auth.bindPass)); // первая привязка — перезапись запрещена
-      } catch { /* UNIQUE-гонка за один email двумя никами — не роняем вход */ }
-    }
-    delete auth.bindPass; delete auth.bindEmail; // пароль не должен жить в client.auth всю сессию
+    const auth = client.auth as { email: string; ip?: string };
 
     const p = new Player();
     p.name = name;
@@ -301,12 +339,13 @@ export class CityRoom extends Room<GameState> {
     rt.salaryAnchorX = p.x; // якорь патруля = точка спавна
     rt.salaryAnchorZ = p.z;
     this.runtimes.set(client.sessionId, rt);
-    client.send('authToken', { token: rec.secret ?? '', name }); // name — клиент кладёт токен под резолвнутый ник (вход по email)
+    client.send('spawnOk', { name });
     client.send('smsInbox', { unread: this.db.unreadCount(name) });
     this.broadcast('sys', { code: 'join', name, t: this.state.serverTime }); // системное: вошёл в город
   }
 
   async onLeave(client: Client, consented: boolean): Promise<void> {
+    if (!this.state.players.get(client.sessionId)) return; // лобби-клиент: ни игрока, ни runtime — чистить нечего
     try {
       if (consented) throw new Error('consented leave');
       const rt = this.runtimes.get(client.sessionId);

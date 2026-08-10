@@ -319,7 +319,7 @@ function bootGame(room: Room): void {
     const me = (current.state.players as any).get(current.sessionId);
     const ownCar = me && me.mode === 'car' ? (current.state.cars as any).get(me.carId) : undefined;
     if (me) {
-      const predicted = prediction.update(dt, input.current, me.mode, me.x, me.z, ownCar);
+      const predicted = prediction.update(dt, input.current, me.mode, me.x, me.z, ownCar, current.state.serverTime ?? 0, rtt);
       avatars.selfPos = predicted && me.mode === 'foot' ? { x: prediction.x, z: prediction.z } : null;
       avatars.selfCarPos = predicted && me.mode === 'car' && prediction.car
         ? { x: prediction.car.x, z: prediction.car.z, rotY: prediction.car.rotY }

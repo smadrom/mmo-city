@@ -2,15 +2,21 @@ html, body { margin: 0; height: 100%; overflow: hidden; font-family: sans-serif;
 canvas { display: block; }
 .hidden { display: none !important; }
 
-#join {
+#join, #chars {
   position: fixed; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 16px;
   background: #1a1a2e; color: #eee; z-index: 10;
 }
-#nameInput { padding: 10px; font-size: 18px; }
+#emailInput, #passInput, #newCharName { padding: 10px; font-size: 18px; }
 .roles { display: flex; gap: 12px; }
 button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
-#joinError { color: #ff6666; }
+#joinError, #charsError { color: #ff6666; }
+#charList { display: flex; flex-direction: column; gap: 8px; }
+.charCard { display: flex; gap: 10px; align-items: center; }
+.charCard span { min-width: 220px; }
+#charCreate { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+#charsNote { color: #aaa; font-size: 14px; min-height: 18px; }
+button:disabled { opacity: .5; cursor: default; }
 
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #stats {

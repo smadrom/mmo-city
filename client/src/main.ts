@@ -17,63 +17,135 @@ import { TabList } from './tablist.js';
 import { TouchControls } from './touch.js';
 import { t, setLang, getLang, applyStatic } from './i18n/index.js';
 import type { Room } from 'colyseus.js';
-import { CAR_MAX_SPEED, dist2 } from '@mmo/shared';
+import { CAR_MAX_SPEED, CHARACTER_LIMIT, dist2 } from '@mmo/shared';
 
 applyStatic(); // статика экрана входа — сразу на языке пользователя
 
 const joinScreen = document.getElementById('join')!;
-const nameInput = document.getElementById('nameInput') as HTMLInputElement;
 const emailInput = document.getElementById('emailInput') as HTMLInputElement;
 const passInput = document.getElementById('passInput') as HTMLInputElement;
 const joinError = document.getElementById('joinError')!;
+const charsScreen = document.getElementById('chars')!;
+const charListEl = document.getElementById('charList')!;
+const charCreateEl = document.getElementById('charCreate')!;
+const newCharName = document.getElementById('newCharName') as HTMLInputElement;
+const charsNote = document.getElementById('charsNote')!;
+const charsError = document.getElementById('charsError')!;
+
+emailInput.value = localStorage.getItem('lastEmail') ?? ''; // предзаполнение — пароль не храним
 
 document.getElementById('langRu')!.addEventListener('click', () => { setLang('ru'); applyStatic(); });
 document.getElementById('langEn')!.addEventListener('click', () => { setLang('en'); applyStatic(); });
 
 let connecting = false;
 
-async function start(role: string): Promise<void> {
-  const name = nameInput.value.trim();
+async function start(): Promise<void> {
   const email = emailInput.value.trim();
   const password = passInput.value; // без trim: пробелы в пароле значимы
-  if (!name && !email) { // вход по email ник не требует — сервер резолвит его из привязки
-    joinError.textContent = t('join.needName');
+  if (!email) {
+    joinError.textContent = t('join.needEmail');
     return;
   }
   if (connecting) return;
   connecting = true;
   let room: Room;
   try {
-    room = await connect(name, role, email, password);
+    room = await connect(email, password);
   } catch (e: any) {
     connecting = false;
     const msg = String(e?.message ?? '');
-    joinError.textContent = msg.includes('bad_token')
-      ? t('join.badToken')
-      : msg.includes('bad_password')
+    joinError.textContent = msg.includes('bad_password')
       ? t('join.badPassword')
       : msg.includes('weak_password')
       ? t('join.weakPassword')
       : msg.includes('bad_version')
       ? t('join.badVersion')
+      : msg.includes('account_online')
+      ? t('join.accountOnline')
       : msg.includes('banned')
       ? t('join.banned')
       : t('join.full');
     return;
   }
+  localStorage.setItem('lastEmail', email);
   joinScreen.style.display = 'none';
+  enterLobby(room);
+}
+
+interface CharListMsg { chars: { name: string; role: string }[]; copFull: boolean }
+
+// лобби: комната есть, игрока ещё нет — выбор/создание/удаление персонажа
+function enterLobby(room: Room): void {
+  let spawned = false;
+  charsScreen.classList.remove('hidden');
+  charsError.textContent = '';
+
+  room.onMessage('charList', (m: CharListMsg) => renderChars(room, m));
+  room.onMessage('lobbyError', (m: { code?: string }) => {
+    charsError.textContent = t(`chars.err.${m?.code ?? 'generic'}`);
+  });
+  room.onMessage('spawnOk', () => {
+    spawned = true;
+    charsScreen.classList.add('hidden');
+    void onSpawned(room);
+  });
+  room.onLeave(() => {
+    if (spawned) return; // игровой реконнект разбирает bootGame
+    charsScreen.classList.add('hidden');
+    joinScreen.style.display = '';
+    joinError.textContent = t('join.full');
+    connecting = false;
+  });
+  document.getElementById('createCitizen')!.addEventListener('click', () => sendCreate(room, 'citizen'));
+  document.getElementById('createCop')!.addEventListener('click', () => sendCreate(room, 'cop'));
+}
+
+function sendCreate(room: Room, role: string): void {
+  const name = newCharName.value.trim();
+  if (!name) {
+    charsError.textContent = t('chars.err.nick_bad');
+    return;
+  }
+  charsError.textContent = '';
+  room.send('createChar', { name, role });
+}
+
+function renderChars(room: Room, m: CharListMsg): void {
+  charListEl.innerHTML = '';
+  for (const ch of m.chars) {
+    const card = document.createElement('div');
+    card.className = 'charCard';
+    const label = document.createElement('span');
+    label.textContent = `${ch.name} — ${t(`role.${ch.role}`)}`;
+    const play = document.createElement('button');
+    play.textContent = t('chars.play');
+    play.addEventListener('click', () => { charsError.textContent = ''; room.send('selectChar', { name: ch.name }); });
+    const del = document.createElement('button');
+    del.textContent = t('chars.delete');
+    del.addEventListener('click', () => {
+      if (confirm(t('chars.deleteConfirm', { name: ch.name }))) {
+        charsError.textContent = '';
+        room.send('deleteChar', { name: ch.name });
+      }
+    });
+    card.append(label, play, del);
+    charListEl.appendChild(card);
+  }
+  const full = m.chars.length >= CHARACTER_LIMIT;
+  charCreateEl.style.display = full ? 'none' : '';
+  (document.getElementById('createCop') as HTMLButtonElement).disabled = m.copFull;
+  charsNote.textContent = full ? t('chars.slotsFull') : m.copFull ? t('chars.copFull') : '';
+}
+
+async function onSpawned(room: Room): Promise<void> {
   document.getElementById('hud')!.classList.remove('hidden');
   try {
-    // сервер может умереть между join и первым патчем — без таймаута был бы вечный чёрный экран
     await Promise.race([
       waitLiveState(room),
       new Promise((_, reject) => setTimeout(() => reject(new Error('state_timeout')), 8000)),
     ]);
   } catch {
-    connecting = false;
-    joinError.textContent = t('join.full');
-    joinScreen.style.display = '';
-    document.getElementById('hud')!.classList.add('hidden');
+    location.reload(); // state не ожил — чистый рестарт на экран входа
     return;
   }
   bootGame(room);
@@ -227,7 +299,7 @@ function bootGame(room: Room): void {
         return;
       } catch { /* сервер ещё держит место или недоступен — следующая попытка */ }
     }
-    location.reload(); // окно вышло — на экран входа (токен клейма ника в localStorage)
+    location.reload(); // окно вышло — на экран входа (email предзаполнится из lastEmail)
   };
 
   bindRoomMessages(room);
@@ -343,5 +415,5 @@ function bootGame(room: Room): void {
   }
 }
 
-document.getElementById('joinCitizen')!.addEventListener('click', () => void start('citizen'));
-document.getElementById('joinCop')!.addEventListener('click', () => void start('cop'));
+document.getElementById('joinGo')!.addEventListener('click', () => void start());
+passInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') void start(); });

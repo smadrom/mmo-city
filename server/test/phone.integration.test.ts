@@ -3,7 +3,8 @@ import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Server } from 'colyseus';
 import type { GameState } from '../src/schema/GameState.js';
 import { CityRoom } from '../src/rooms/CityRoom.js';
-import { START_CASH } from '@mmo/shared';
+import { START_CASH, PROTOCOL_VERSION } from '@mmo/shared';
+import { joinWithChar, onceMessage } from './helpers.js';
 
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -23,8 +24,8 @@ describe('Телефон (integration)', () => {
 
   it('sms: онлайн-получатель видит сообщение, отправителю эхо + smsResult', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'smsA', role: 'citizen' });
-    const c2 = await testServer.connectTo(room, { name: 'smsB', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'smsA', 'citizen');
+    const c2 = await joinWithChar(testServer, room, 'smsB', 'citizen');
     const got: any[] = [];
     let result: any = null;
     c1.onMessage('sms', (m) => got.push(m));
@@ -40,7 +41,7 @@ describe('Телефон (integration)', () => {
 
   it('sms: несуществующий ник → smsResult no_such_user', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'smsC', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'smsC', 'citizen');
     let result: any = null;
     c1.onMessage('smsResult', (m) => { result = m; });
     c1.send('sms', { to: 'ghost', text: 'алло' });
@@ -50,27 +51,23 @@ describe('Телефон (integration)', () => {
 
   it('sms: офлайн-получатель при входе получает smsInbox с непрочитанными', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const anchor = await testServer.connectTo(room, { name: 'anchor1', role: 'citizen' });
-    const off = await testServer.connectTo(room, { name: 'off1', role: 'citizen' });
-    let offTok = '';
-    off.onMessage('authToken', (m: any) => { offTok = m.token; });
-    await wait(150);
+    const anchor = await joinWithChar(testServer, room, 'anchor1', 'citizen');
+    const off = await joinWithChar(testServer, room, 'off1', 'citizen');
     await off.leave();
     await wait(200);
     anchor.onMessage('sms', () => {});
     anchor.send('sms', { to: 'off1', text: 'где ты?' });
     await wait(200);
-    const back = await testServer.connectTo(room, { name: 'off1', role: 'citizen', token: offTok });
-    let inbox: any = null;
-    back.onMessage('smsInbox', (m) => { inbox = m; });
-    await wait(300);
-    expect(inbox).toEqual({ unread: 1 });
+    const back = await testServer.connectTo(room, { email: 'off1@t.local', password: 'pw1234', ver: PROTOCOL_VERSION });
+    const inboxP = onceMessage<{ unread: number }>(back, 'smsInbox'); // слушаем ДО selectChar — smsInbox летит сразу за spawnOk
+    back.send('selectChar', { name: 'off1' });
+    expect(await inboxP).toEqual({ unread: 1 });
   });
 
   it('smsHistory/smsThread/smsRead: диалоги, тред, сброс непрочитанных', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'hist1', role: 'citizen' });
-    const c2 = await testServer.connectTo(room, { name: 'hist2', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'hist1', 'citizen');
+    const c2 = await joinWithChar(testServer, room, 'hist2', 'citizen');
     c1.onMessage('sms', () => {});
     c2.onMessage('sms', () => {});
     c1.send('sms', { to: 'hist2', text: 'первое' });
@@ -99,8 +96,8 @@ describe('Телефон (integration)', () => {
 
   it('transfer: балансы обновляются, получателю transferIn', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'bank1', role: 'citizen' });
-    const c2 = await testServer.connectTo(room, { name: 'bank2', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'bank1', 'citizen');
+    const c2 = await joinWithChar(testServer, room, 'bank2', 'citizen');
     const p1 = room.state.players.get(c1.sessionId);
     const p2 = room.state.players.get(c2.sessionId);
     p1.cash = 500;
@@ -120,8 +117,8 @@ describe('Телефон (integration)', () => {
 
   it('transfer: свежий заработок в памяти не даёт ложный no_money (авторизация по памяти)', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'fresh1', role: 'citizen' });
-    const c2 = await testServer.connectTo(room, { name: 'fresh2', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'fresh1', 'citizen');
+    const c2 = await joinWithChar(testServer, room, 'fresh2', 'citizen');
     // заработок только в памяти: БД ещё на START_CASH (savePlayer не вызывали)
     room.state.players.get(c1.sessionId).cash = 900;
     (room as any).runtimes.get(c1.sessionId).playtimeSec = 99999; // обход порога 30 мин (антимультиаккаунт)
@@ -135,8 +132,8 @@ describe('Телефон (integration)', () => {
 
   it('transfer: нехватка средств → no_money', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'poor1', role: 'citizen' });
-    const c2 = await testServer.connectTo(room, { name: 'poor2', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'poor1', 'citizen');
+    const c2 = await joinWithChar(testServer, room, 'poor2', 'citizen');
     void c2;
     const p1 = room.state.players.get(c1.sessionId);
     p1.cash = 50;
@@ -152,7 +149,7 @@ describe('Телефон (integration)', () => {
 
   it('deposit: дробная сумма floor-ится, спам в пределах cooldown игнорируется', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c = await testServer.connectTo(room, { name: 'saver', role: 'citizen' });
+    const c = await joinWithChar(testServer, room, 'saver', 'citizen');
     const p = room.state.players.get(c.sessionId);
     const apt = [...room.state.apartments.values()][0] as any; // арендуем, ставим к двери
     apt.rentedBy = 'saver'; p.apt = apt.id; p.x = apt.doorX; p.z = apt.doorZ; p.cash = 1000; p.safe = 0;
@@ -168,8 +165,8 @@ describe('Телефон (integration)', () => {
 
   it('transferHistory: свои переводы видны', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'th1', role: 'citizen' });
-    const c2 = await testServer.connectTo(room, { name: 'th2', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'th1', 'citizen');
+    const c2 = await joinWithChar(testServer, room, 'th2', 'citizen');
     room.state.players.get(c1.sessionId).cash = 500;
     (room as any).savePlayer(c1.sessionId);
     (room as any).runtimes.get(c1.sessionId).playtimeSec = 99999; // обход порога 30 мин (антимультиаккаунт)
@@ -186,7 +183,7 @@ describe('Телефон (integration)', () => {
 
   it('leaderboardReq → leaderboard с топом по убийствам', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'lb1', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'lb1', 'citizen');
     (room as any).db.save({ name: 'champ', cash: 0, safe: 0, apt: '', kills: 42, deaths: 1, weapon: '', ammo: 0 });
     let msg: any = null;
     c1.onMessage('leaderboard', (m) => { msg = m; });
@@ -197,7 +194,7 @@ describe('Телефон (integration)', () => {
 
   it('jobTake/jobDrop: заказ через телефон, требование машины', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'jobber', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'jobber', 'citizen');
     const p = room.state.players.get(c1.sessionId);
     const results: any[] = [];
     c1.onMessage('jobResult', (m) => results.push(m));

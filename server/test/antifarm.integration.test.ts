@@ -3,6 +3,7 @@ import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { Server } from 'colyseus';
 import { CityRoom } from '../src/rooms/CityRoom.js';
 import type { GameState } from '../src/schema/GameState.js';
+import { joinWithChar } from './helpers.js';
 
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -22,8 +23,8 @@ describe('антимультиаккаунт (integration)', () => {
 
   it('перевод без наигрыша 30 мин → need_playtime', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'farm1', role: 'citizen' });
-    await testServer.connectTo(room, { name: 'farm2', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'farm1', 'citizen');
+    await joinWithChar(testServer, room, 'farm2', 'citizen');
     room.state.players.get(c1.sessionId).cash = 500;
     (room as any).savePlayer(c1.sessionId);
     let result: any = null;
@@ -35,8 +36,9 @@ describe('антимультиаккаунт (integration)', () => {
 
   it('наигрыш копится тиками и персистится через savePlayer', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'pt1', role: 'citizen' });
-    await wait(150); // первый же тик накидывает +60 (lastPlaytimeAt стартует с 0)
+    const c1 = await joinWithChar(testServer, room, 'pt1', 'citizen');
+    (room as any).lastPlaytimeAt = 0; // форсируем начисление на ближайшем тике (спавн через лобби мог опоздать к первому)
+    await wait(150);
     const rt = (room as any).runtimes.get(c1.sessionId);
     expect(rt.playtimeSec).toBeGreaterThanOrEqual(60);
     rt.playtimeSec = 4321;
@@ -46,23 +48,21 @@ describe('антимультиаккаунт (integration)', () => {
 
   it('наигрыш восстанавливается при повторном входе', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    await testServer.connectTo(room, { name: 'ptAnchor', role: 'citizen' }); // держит комнату
-    const c1 = await testServer.connectTo(room, { name: 'pt2', role: 'citizen' });
-    let tok = '';
-    c1.onMessage('authToken', (m: any) => { tok = m.token; });
+    await joinWithChar(testServer, room, 'ptAnchor', 'citizen'); // держит комнату
+    const c1 = await joinWithChar(testServer, room, 'pt2', 'citizen');
     await wait(150);
     (room as any).runtimes.get(c1.sessionId).playtimeSec = 999;
     (room as any).savePlayer(c1.sessionId);
     await c1.leave();
     await wait(200);
-    const c2 = await testServer.connectTo(room, { name: 'pt2', role: 'citizen', token: tok });
+    const c2 = await joinWithChar(testServer, room, 'pt2'); // тот же email → selectChar
     expect((room as any).runtimes.get(c2.sessionId).playtimeSec).toBe(999);
   });
 
   it('суточный IP-лимит: 800+800 с одного IP → второй перевод ip_limit', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'whale1', role: 'citizen' });
-    await testServer.connectTo(room, { name: 'whale2', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'whale1', 'citizen');
+    await joinWithChar(testServer, room, 'whale2', 'citizen');
     const p1 = room.state.players.get(c1.sessionId);
     p1.cash = 5000;
     (room as any).runtimes.get(c1.sessionId).playtimeSec = 99999;
@@ -79,8 +79,8 @@ describe('антимультиаккаунт (integration)', () => {
 
   it('записи старше 24 ч не считаются в IP-лимит', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
-    const c1 = await testServer.connectTo(room, { name: 'old1', role: 'citizen' });
-    await testServer.connectTo(room, { name: 'old2', role: 'citizen' });
+    const c1 = await joinWithChar(testServer, room, 'old1', 'citizen');
+    await joinWithChar(testServer, room, 'old2', 'citizen');
     const p1 = room.state.players.get(c1.sessionId);
     p1.cash = 5000;
     const rt = (room as any).runtimes.get(c1.sessionId);

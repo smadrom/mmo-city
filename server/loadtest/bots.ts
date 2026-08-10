@@ -1,10 +1,12 @@
 import { Client, type Room } from 'colyseus.js';
+import { PROTOCOL_VERSION } from '@mmo/shared';
 
 // Нагрузочный тест: N ботов с полным профилем сообщений (движение, бой, магазин,
 // чат, sms, переводы, сейф, заказы, лидерборд) на RUN_MS миллисекунд.
 // Метрики: интервалы serverTime между патчами (здоровье тика), RSS сервера
 // через /healthz до/после, ошибки джойна. Пороги деградации → exit(1).
-// Сервер поднимается отдельно, против ЧИСТОЙ БД (боты без токенов):
+// Сервер поднимается отдельно, против ЧИСТОЙ БД (иначе повторные прогоны
+// упираются в занятые ники и уже зарегистрированные аккаунты):
 //   GAME_DB=':memory:' npm run start -w server
 //   npm run loadtest -w server
 
@@ -37,7 +39,7 @@ function percentile(sorted: number[], p: number): number {
 
 // все типы, которые может прислать сервер — подписываемся, чтобы не спамить warning'и
 const SILENCED = [
-  'authToken', 'smsInbox', 'sms', 'smsResult', 'smsHistory', 'smsThread',
+  'charList', 'lobbyError', 'spawnOk', 'smsInbox', 'sms', 'smsResult', 'smsHistory', 'smsThread',
   'transferResult', 'transferIn', 'transferHistory', 'notice', 'feed',
   'picked', 'delivered', 'leaderboard', 'chat', 'chatHistory',
   'shot', 'hit', 'swing', 'shopResult', 'jobResult', 'openShop', 'openSafe',
@@ -56,9 +58,10 @@ async function main(): Promise<void> {
     const client = new Client(url);
     try {
       const role = i % 6 === 0 ? 'cop' : 'citizen';
-      const room: Room = await client.joinOrCreate('city', { name: `bot${i}`, role });
+      const room: Room = await client.joinOrCreate('city', { email: `bot${i}@load.test`, password: 'botpw1234', ver: PROTOCOL_VERSION });
       connected++;
       for (const type of SILENCED) room.onMessage(type, () => {});
+      room.send('createChar', { name: `bot${i}`, role });
 
       // метрика тика: дельты serverTime между патчами состояния
       let lastSt = 0;

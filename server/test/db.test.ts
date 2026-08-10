@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { unlinkSync, existsSync } from 'node:fs';
+import { unlinkSync, existsSync, rmSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import { GameDB } from '../src/db.js';
 import { START_CASH } from '@mmo/shared';
@@ -149,6 +149,56 @@ describe('GameDB', () => {
     expect(db.getRentDue('renter')).toBe(0);
     db.setRentDue('renter', 1_700_000_000_000);
     expect(db.getRentDue('renter')).toBe(1_700_000_000_000);
+  });
+
+  it('accounts/chars: createAccount/getAccount, createChar/listChars/countChars/getChar', () => {
+    const db = new GameDB(':memory:');
+    expect(db.getAccount('a@b.c')).toBeNull();
+    db.createAccount('a@b.c', 'salt:hash');
+    expect(db.getAccount('a@b.c')).toEqual({ email: 'a@b.c', passhash: 'salt:hash' });
+    expect(db.countChars('a@b.c')).toBe(0);
+    db.createChar('a@b.c', 'neo', 'citizen');
+    db.createChar('a@b.c', 'trinity', 'cop');
+    expect(db.countChars('a@b.c')).toBe(2);
+    expect(db.listChars('a@b.c')).toEqual([
+      { name: 'neo', role: 'citizen' },
+      { name: 'trinity', role: 'cop' },
+    ]);
+    expect(db.getChar('neo')).toEqual({ name: 'neo', email: 'a@b.c', role: 'citizen' });
+    expect(db.getChar('nobody')).toBeNull();
+    // createChar создаёт и строку прогресса со стартовым капиталом
+    expect(db.load('neo').cash).toBe(START_CASH);
+    db.close();
+  });
+
+  it('deleteChar: чистит characters/players/sms; ник освобождается; бан не трогает', () => {
+    const db = new GameDB(':memory:');
+    db.createAccount('a@b.c', 'salt:hash');
+    db.createChar('a@b.c', 'neo', 'citizen');
+    db.addSms('neo', 'trinity', 'hi', 1);
+    db.addSms('trinity', 'neo', 'yo', 2);
+    db.ban('neo', '', 'test', null, false);
+    db.deleteChar('neo');
+    expect(db.getChar('neo')).toBeNull();
+    expect(db.hasPlayer('neo')).toBe(false);
+    expect(db.getDialogs('trinity')).toEqual([]); // SMS с ником стёрты
+    expect(db.getActiveBan('neo', Date.now())).not.toBeNull(); // бан переживает удаление (анти-обход)
+    db.createChar('a@b.c', 'neo', 'cop'); // ник освободился
+    expect(db.getChar('neo')?.role).toBe('cop');
+    db.close();
+  });
+
+  it('миграция: старый email-аккаунт переносится в accounts/characters', () => {
+    const path = `test-migrate-chars-${Date.now()}.db`;
+    const db1 = new GameDB(path);
+    db1.load('oldnick'); // строка прогресса
+    (db1 as any).db.prepare(`UPDATE players SET email = 'old@example.com', passhash = 'salt:hash' WHERE name = 'oldnick'`).run();
+    db1.close();
+    const db2 = new GameDB(path); // конструктор → migrate() → бэкфилл
+    expect(db2.getAccount('old@example.com')).toEqual({ email: 'old@example.com', passhash: 'salt:hash' });
+    expect(db2.getChar('oldnick')).toEqual({ name: 'oldnick', email: 'old@example.com', role: 'citizen' });
+    db2.close();
+    rmSync(path, { force: true }); rmSync(`${path}-wal`, { force: true }); rmSync(`${path}-shm`, { force: true });
   });
 });
 

@@ -71,6 +71,8 @@ export const CHAT_HISTORY_COOLDOWN_MS = 5000; // chatHistoryReq не чаще р
 
 export const MAX_PLAYERS = 100;
 
+export const CHARACTER_LIMIT = 8; // персонажей на одном email-аккаунте
+
 export const PICKUP_RESPAWN_MS = 30_000;
 export const PICKUP_RADIUS = 1.5;
 

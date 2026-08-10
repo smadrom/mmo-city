@@ -69,6 +69,17 @@ export class GameDB {
         name TEXT PRIMARY KEY,
         until INTEGER NOT NULL,
         reason TEXT NOT NULL DEFAULT ''
+      );
+      CREATE TABLE IF NOT EXISTS accounts (
+        email TEXT PRIMARY KEY,
+        passhash TEXT NOT NULL,
+        created INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS characters (
+        name TEXT PRIMARY KEY,
+        email TEXT NOT NULL,
+        role TEXT NOT NULL,
+        created INTEGER NOT NULL
       )
     `);
     this.migrate();
@@ -88,6 +99,13 @@ export class GameDB {
     if (!has('playtime_sec')) this.db.exec(`ALTER TABLE players ADD COLUMN playtime_sec INTEGER NOT NULL DEFAULT 0`);
     if (!has('email')) this.db.exec(`ALTER TABLE players ADD COLUMN email TEXT NOT NULL DEFAULT ''`);
     if (!has('passhash')) this.db.exec(`ALTER TABLE players ADD COLUMN passhash TEXT NOT NULL DEFAULT ''`);
+    // жёсткий срез → старые email-привязки переносятся в accounts/characters (идемпотентно)
+    this.db.exec(`
+      INSERT OR IGNORE INTO accounts (email, passhash, created)
+        SELECT email, passhash, 0 FROM players WHERE email != '';
+      INSERT OR IGNORE INTO characters (name, email, role, created)
+        SELECT name, email, 'citizen', 0 FROM players WHERE email != '';
+    `);
   }
 
   load(name: string): PlayerRecord {
@@ -123,6 +141,43 @@ export class GameDB {
     if (!email) return null; // '' — дефолт непривязанных аккаунтов, не должен совпадать
     const row = this.db.prepare('SELECT name, passhash FROM players WHERE email = ?').get(email) as { name: string; passhash: string } | undefined;
     return row ?? null;
+  }
+
+  // --- аккаунты и персонажи (обязательная email-регистрация) ---
+
+  getAccount(email: string): { email: string; passhash: string } | null {
+    const row = this.db.prepare('SELECT email, passhash FROM accounts WHERE email = ?').get(email) as { email: string; passhash: string } | undefined;
+    return row ?? null;
+  }
+
+  createAccount(email: string, passhash: string): void {
+    this.db.prepare('INSERT INTO accounts (email, passhash, created) VALUES (?, ?, ?)').run(email, passhash, Date.now());
+  }
+
+  listChars(email: string): { name: string; role: string }[] {
+    return this.db.prepare('SELECT name, role FROM characters WHERE email = ? ORDER BY created, name').all(email) as { name: string; role: string }[];
+  }
+
+  countChars(email: string): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS c FROM characters WHERE email = ?').get(email) as { c: number };
+    return row.c;
+  }
+
+  getChar(name: string): { name: string; email: string; role: string } | null {
+    const row = this.db.prepare('SELECT name, email, role FROM characters WHERE name = ?').get(name) as { name: string; email: string; role: string } | undefined;
+    return row ?? null;
+  }
+
+  createChar(email: string, name: string, role: string): void {
+    this.db.prepare('INSERT INTO characters (name, email, role, created) VALUES (?, ?, ?, ?)').run(name, email, role, Date.now());
+    this.load(name); // строка прогресса со стартовым капиталом
+  }
+
+  // удаление персонажа: прогресс и SMS стираем; transfers/transfer_log/bans/mutes — аудит, не трогаем
+  deleteChar(name: string): void {
+    this.db.prepare('DELETE FROM characters WHERE name = ?').run(name);
+    this.db.prepare('DELETE FROM players WHERE name = ?').run(name);
+    this.db.prepare('DELETE FROM sms WHERE from_nick = ? OR to_nick = ?').run(name, name);
   }
 
   // срок следующей ренты (ms). 0 = не задан (новый/без квартиры). Персистится → релог не сбрасывает.

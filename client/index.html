@@ -9,18 +9,30 @@
 <body>
   <div id="join">
     <h1>MMO City</h1>
-    <input id="nameInput" maxlength="16" data-i18n-ph="join.nickPh" />
     <input id="emailInput" type="email" maxlength="64" data-i18n-ph="join.emailPh" />
     <input id="passInput" type="password" data-i18n-ph="join.passPh" />
     <div class="roles">
-      <button id="joinCitizen" data-i18n="join.citizen"></button>
-      <button id="joinCop" data-i18n="join.cop"></button>
+      <button id="joinGo" data-i18n="join.go"></button>
     </div>
     <div class="roles">
       <button id="langRu">RU</button>
       <button id="langEn">EN</button>
     </div>
     <div id="joinError"></div>
+  </div>
+
+  <div id="chars" class="hidden">
+    <h1 data-i18n="chars.title"></h1>
+    <div id="charList"></div>
+    <div id="charCreate">
+      <input id="newCharName" maxlength="16" data-i18n-ph="chars.namePh" />
+      <div class="roles">
+        <button id="createCitizen" data-i18n="join.citizen"></button>
+        <button id="createCop" data-i18n="join.cop"></button>
+      </div>
+    </div>
+    <div id="charsNote"></div>
+    <div id="charsError"></div>
   </div>
 
   <div id="hud" class="hidden">

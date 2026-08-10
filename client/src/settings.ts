@@ -34,7 +34,8 @@ export class Settings {
       this.applyQuality(quality.value);
     });
     document.getElementById('setLogout')!.addEventListener('click', () => {
-      for (const k of Object.keys(localStorage).filter(k => k.startsWith('tok:'))) localStorage.removeItem(k); // сброс клейма ника
+      localStorage.removeItem('lastEmail'); // предзаполнение email
+      for (const k of Object.keys(localStorage).filter(k => k.startsWith('tok:'))) localStorage.removeItem(k); // legacy-клеймы ников
       location.reload();
     });
     document.getElementById('settingsClose')!.addEventListener('click', () => this.close());

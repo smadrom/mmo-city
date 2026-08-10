@@ -299,7 +299,7 @@ function bootGame(room: Room): void {
         return;
       } catch { /* сервер ещё держит место или недоступен — следующая попытка */ }
     }
-    location.reload(); // окно вышло — на экран входа (токен клейма ника в localStorage)
+    location.reload(); // окно вышло — на экран входа (email предзаполнится из lastEmail)
   };
 
   bindRoomMessages(room);

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Деплой на VPS через Docker: git archive → compose build → up -d → healthz.
-# Запуск из корня репо:  ./deploy/deploy.sh root@77.42.4.230
+# Запуск из корня репо:  ./deploy/deploy.sh deploy@77.42.4.230
 # На хосте нужен Docker с compose v2; конфигурация — /srv/mmo/deploy/docker/.env
 set -euo pipefail
-HOST="${1:?usage: deploy/deploy.sh root@host}"
+HOST="${1:?usage: deploy/deploy.sh deploy@host}"
 
 echo "== заливаем код на $HOST:/srv/mmo"
 git archive HEAD | ssh "$HOST" 'mkdir -p /srv/mmo && tar -x -C /srv/mmo'

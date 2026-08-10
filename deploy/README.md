@@ -6,18 +6,18 @@
 ## 0. Подготовка
 
 - DNS уже настроен: `mmo.expw.net → 77.42.4.230` ✓
-- Локальный `ssh root@77.42.4.230` с этой машины — `deploy.sh` ходит по ssh.
+- Локальный `ssh deploy@77.42.4.230` с этой машины — `deploy.sh` ходит по ssh.
 - **Docker** на VPS (один раз, официальный скрипт — ставит docker-ce + compose-плагин v2):
   ```bash
-  ssh root@77.42.4.230 'curl -fsSL https://get.docker.com | sh'
-  ssh root@77.42.4.230 'docker compose version'  # проверка: Docker Compose v2.x
+  ssh deploy@77.42.4.230 'curl -fsSL https://get.docker.com | sh'
+  ssh deploy@77.42.4.230 'docker compose version'  # проверка: Docker Compose v2.x
   ```
 
 ## 1. Остановить старый билд и забэкапить БД (один раз)
 
 ```bash
-ssh root@77.42.4.230 'systemctl disable --now mmo-server nginx || true'
-ssh root@77.42.4.230 'mkdir -p /srv/mmo/data /srv/mmo/letsencrypt && cp /srv/mmo/server/game.db /srv/mmo/data/game.db && cp /srv/mmo/server/game.db /root/game.db.bak'
+ssh deploy@77.42.4.230 'systemctl disable --now mmo-server nginx || true'
+ssh deploy@77.42.4.230 'mkdir -p /srv/mmo/data /srv/mmo/letsencrypt && cp /srv/mmo/server/game.db /srv/mmo/data/game.db && cp /srv/mmo/server/game.db ~/game.db.bak'
 ```
 
 Июльские аккаунты сохранятся: миграции идемпотентны, ники без секрета заклеймятся при первом входе владельца.
@@ -25,7 +25,7 @@ ssh root@77.42.4.230 'mkdir -p /srv/mmo/data /srv/mmo/letsencrypt && cp /srv/mmo
 ## 2. Конфигурация .env (один раз)
 
 ```bash
-ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker && cp .env.example .env && sed -i "s/DOMAIN=example.com/DOMAIN=mmo.expw.net/" .env && sed -i "s/you@example.com/<твой-email>/" .env && sed -i "s/ADMIN_TOKEN=change-me/ADMIN_TOKEN=$(openssl rand -hex 32)/" .env && chmod 600 .env && grep ADMIN_TOKEN .env'
+ssh deploy@77.42.4.230 'cd /srv/mmo/deploy/docker && cp .env.example .env && sed -i "s/DOMAIN=example.com/DOMAIN=mmo.expw.net/" .env && sed -i "s/you@example.com/<твой-email>/" .env && sed -i "s/ADMIN_TOKEN=change-me/ADMIN_TOKEN=$(openssl rand -hex 32)/" .env && chmod 600 .env && grep ADMIN_TOKEN .env'
 ```
 
 `ADMIN_TOKEN` из вывода — сохранить себе (вход в `/admin/`). Если `.env` уже есть — только проверить `DOMAIN` и `ACME_EMAIL`.
@@ -33,7 +33,7 @@ ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker && cp .env.example .env && sed -
 ## 3. Выкат (с этой машины, из корня репо)
 
 ```bash
-./deploy/deploy.sh root@77.42.4.230
+./deploy/deploy.sh deploy@77.42.4.230
 ```
 
 Скрипт: `git archive HEAD` → `/srv/mmo` → `docker compose build` → `up -d` → healthz на localhost.
@@ -52,7 +52,7 @@ curl -s https://mmo.expw.net/healthz   # {"status":"ok","players":0,...}
 ## 5. Закрыть игровой порт наружу
 
 ```bash
-ssh root@77.42.4.230 'ufw delete allow 2567 || true; ufw allow 80; ufw allow 443; ufw enable; ufw status'
+ssh deploy@77.42.4.230 'ufw delete allow 2567 || true; ufw allow 80; ufw allow 443; ufw enable; ufw status'
 ```
 
 Остаются: 22 (ssh), 80 (редирект на https + ACME), 443 (игра). 2567 слушает только localhost хоста.
@@ -60,7 +60,7 @@ ssh root@77.42.4.230 'ufw delete allow 2567 || true; ufw allow 80; ufw allow 443
 ## 6. Каждый следующий деплой
 
 ```bash
-./deploy/deploy.sh root@77.42.4.230
+./deploy/deploy.sh deploy@77.42.4.230
 ```
 
 ## Как устроен роутинг (traefik labels в docker-compose.yml)
@@ -72,9 +72,9 @@ ssh root@77.42.4.230 'ufw delete allow 2567 || true; ufw allow 80; ufw allow 443
 
 ## Операционка
 
-- Логи: `ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker && docker compose logs -f'` (или `logs -f server` / `traefik`).
+- Логи: `ssh deploy@77.42.4.230 'cd /srv/mmo/deploy/docker && docker compose logs -f'` (или `logs -f server` / `traefik`).
 - Статус: `docker compose ps` там же; healthz хоста: `curl http://127.0.0.1:2567/healthz`.
-- Бэкап БД: `ssh root@77.42.4.230 'cd /srv/mmo/deploy/docker && docker compose stop server && cp /srv/mmo/data/game.db /root/game.db.$(date +%F-%H%M).bak && docker compose start server'`.
+- Бэкап БД (WAL-режим: копируем все три файла, game.db сам по себе почти пуст): `ssh deploy@77.42.4.230 'cd /srv/mmo/deploy/docker && docker compose stop server && tar -czf ~/game.db-full.$(date +%F-%H%M).tar.gz -C /srv/mmo/data game.db game.db-wal game.db-shm && docker compose start server'`.
 - Откат: вернуть `game.db` из бэкапа в `/srv/mmo/data/`, локально `git checkout <старый-sha>`, `./deploy/deploy.sh ...`.
 
 ## Структура deploy/docker

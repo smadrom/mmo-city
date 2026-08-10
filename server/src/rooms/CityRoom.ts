@@ -232,6 +232,7 @@ export class CityRoom extends Room<GameState> {
       const name = String(data?.name ?? '').trim().slice(0, 16);
       const char = this.db.getChar(name);
       if (!char || char.email !== auth.email) return this.lobbyError(client, 'not_found');
+      if (this.findSessionByName(name)) return this.lobbyError(client, 'not_found'); // персонаж в мире (даже frozen-призрак) — не удаляем
       this.db.deleteChar(name);
       this.sendCharList(client); // свежий список после удаления
     });

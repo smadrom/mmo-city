@@ -127,6 +127,24 @@ describe('персонажи/лобби (integration)', () => {
     expect(room.db.hasPlayer('doomed')).toBe(false);
   });
 
+  it('deleteChar не трогает персонажа, чей frozen-призрак ещё в мире; после ухода призрака удаляет', async () => {
+    const room = await testServer.createRoom<GameState>('city') as any;
+    const c = await joinWithChar(testServer, room, 'ghostdel');
+    await c.leave(false); // неконсенсусный уход → призрак заморожен на окно реконнекта
+    await new Promise(r => setTimeout(r, 200)); // дать onLeave пометить призрака frozen
+    expect(room.state.players.get(c.sessionId)).toBeDefined(); // призрак в мире
+    const c2 = await testServer.connectTo(room, OPTS('ghostdel@t.local')); // релогин → лобби
+    const err = onceMessage<{ code: string }>(c2, 'lobbyError');
+    c2.send('deleteChar', { name: 'ghostdel' });
+    expect((await err).code).toBe('not_found');
+    expect(room.db.getChar('ghostdel')).not.toBeNull(); // персонаж цел
+    (room as any).removePlayer(c.sessionId); // форсируем истечение окна призрака (тот же вызов, что и таймаут реконнекта)
+    const list = onceMessage<{ chars: any[] }>(c2, 'charList');
+    c2.send('deleteChar', { name: 'ghostdel' });
+    expect((await list).chars).toEqual([]);
+    expect(room.db.getChar('ghostdel')).toBeNull();
+  });
+
   it('забаненный ник: selectChar и createChar → banned, спавна нет', async () => {
     const room = await testServer.createRoom<GameState>('city') as any;
     room.db.createChar('bad@t.local', 'badguy', 'citizen');

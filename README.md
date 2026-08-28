@@ -1,97 +1,76 @@
 # MMO City
 
-Браузерная 3D MMO на 100 игроков: аренда квартир, кулачный бой и оружие, машины, игроки-полицейские, зомби.
+[![ci](https://github.com/smadrom/mmo-city/actions/workflows/ci.yml/badge.svg)](https://github.com/smadrom/mmo-city/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-- RU/EN локализация — переключатель на экране входа
-- прозрачный реконнект (окно 10 с) — игра продолжается без перезахода
-- лидерборд в телефоне («Рейтинг»), баунти 25$ за убийство розыскных
-- оружие выпадает с трупов пикапом, с зомби падают 10–29$
-- награда за доставку зависит от дистанции
-- kill feed (убийства, аресты, баунти), звуки WebAudio
-- тени и окна на зданиях, день/ночь (10-минутный цикл)
-- системные сообщения входа/выхода в чате
-- хитмаркер и индикатор направления урона
-- онбординг-подсказки новичку
-- обязательная регистрация по email+паролю (scrypt): до 8 персонажей на аккаунт — у каждого свой ник, роль и прогресс; выход в настройках
-- пинг в HUD, игроки на карте (роли, розыск красным)
-- предсказание своей машины и адаптивная интерполяция чужих (catmull-rom)
-- машина: нитро на Shift, динамическая камера, звук мотора, следы шин, отскок от стен
+A browser-based 3D MMO for up to 100 players in a shared city: apartment rentals, fist fights and firearms, drivable cars, player-police with a wanted system, and zombies. Runs entirely in the browser — no downloads, no plugins.
 
-## Запуск
+![Gameplay](docs/screenshots/gameplay.png)
+
+<p align="center">
+  <img src="docs/screenshots/map.png" alt="City map" width="49%" />
+  <img src="docs/screenshots/phone.png" alt="In-game phone" width="49%" />
+</p>
+
+## Features
+
+- **Shared world for 100 players** — one Colyseus room, server-authoritative state
+- **Accounts & characters** — email+password registration (scrypt), up to 8 characters per account with independent nick, role and progress
+- **Two roles** — Citizen and Police: cops see wanted players marked in red, arrest them by standing close, earn salary and bonuses
+- **Combat** — fists, bat, pistol, rifle; hitmarkers, damage direction indicator, tracers, recoil; weapons drop from corpses as pickups
+- **Cars** — nitro on Shift, dynamic camera, engine sound, tire marks, wall bounce; client-side prediction for your own car, adaptive catmull-rom interpolation for others
+- **Economy** — courier jobs with distance-based pay, apartment rent with a personal safe, bank transfers (offline players get credited on login), cash drops on death
+- **Wanted system** — kill someone and get a bounty on your head; bounty hunters earn $25 per wanted kill
+- **Zombies** — roam the cemetery, chase and attack, drop $10–29
+- **Social** — in-game phone with SMS threads (with offline delivery and unread badge), leaderboard
+- **World** — day/night cycle (10 minutes), building shadows and lit windows, minimap + full-screen map with POIs, kill feed, chat, WebAudio sounds
+- **Resilience** — transparent reconnect (10s window): the game continues without re-login on connection drops
+- **Localization** — RU/EN switch on the login screen
+- **Touch support** — virtual joystick, swipe camera, on-screen buttons
+
+## Quick start
 
 ```bash
 npm install
-npm run dev        # сервер (ws://localhost:2567) + клиент (http://localhost:5173)
+npm run dev        # server (ws://localhost:2567) + client (http://localhost:5173)
 ```
 
-Открыть http://localhost:5173 и ввести email+пароль: первый вход регистрирует аккаунт (подтверждение почты не требуется), дальше эти email+пароль обязательны. Затем экран персонажей: создать персонажа (ник + роль «Гражданин» или «Полицейский») или выбрать существующего. На аккаунте до 8 персонажей со своим прогрессом; удаление персонажа необратимо.
+Open http://localhost:5173 and enter an email and password — the first login registers the account (no email confirmation needed). Then create a character (nickname + Citizen/Police role) or pick an existing one.
 
-Клиент подключается к серверу на `ws://<хост страницы>:2567`; адрес можно переопределить переменной окружения `VITE_SERVER_URL`.
+The client connects to `ws://<page-host>:2567`; override with the `VITE_SERVER_URL` env variable.
 
-## Управление
+## Controls
 
-- WASD — движение, Shift — бег (в машине — нитро), мышь — камера
-- колесо — зум камеры, ПКМ — прицел (сужает FOV)
-- F3 — FPS/пинг, Tab — список игроков, Esc — меню настроек (громкость, язык, качество)
-- ЛКМ (после захвата указателя) — удар
-- E — сесть/выйти из машины, взять груз, аренда, сейф
-- N — звук вкл/выкл
-- Тач: виртуальный джойстик — движение, свайп — камера, экранные кнопки — действия; полная карта — пан и pinch-зум
+- WASD — move, Shift — run (nitro in a car), mouse — camera
+- Wheel — zoom, RMB — aim (narrows FOV)
+- LMB (after pointer lock) — attack
+- E — enter/exit car, take cargo, rent, safe
+- Tab — player list, P — phone, M — map, Esc — settings, F3 — FPS/ping, N — mute
 
-## Команды
+## Tech stack
 
-- `npm test` — юнит- и интеграционные тесты (46 shared + 233 server)
-- `npm run build -w client` — сборка клиента (то же, что `npm run build` из корня)
-- `npm run loadtest -w server` — 100 ботов против локального сервера (требует чистую `server/game.db`: боты регистрируются как botN@load.test и создают персонажей botN, против существующей БД эти ники уже заняты — для повтора удали файл БД)
+- `shared/` — constants, city map, physics (used by both server and client)
+- `server/` — Node.js, Colyseus room, game systems, SQLite (WAL) persistence
+- `client/` — Three.js renderer, input, HUD, Vite build
 
-Нагрузочный тест на локальной машине: 100/100 ботов в одной комнате, ~7% CPU одного ядра, память стабильна (~115 МБ).
+Load test on a local machine: 100/100 bots in one room, ~7% CPU of a single core, stable memory (~115 MB).
 
-## Структура
+## Commands
 
-- `shared/` — константы, карта города, физика (общая для сервера и клиента)
-- `server/` — Colyseus-комната, игровые системы, SQLite
-- `client/` — Three.js-рендер, ввод, HUD
+- `npm test` — unit and integration tests (46 shared + 234 server)
+- `npm run typecheck` — strict TypeScript across all workspaces
+- `npm run build` — production client build
+- `npm run loadtest -w server` — 100 bots against a local server (requires a clean `server/game.db`; delete the file to re-run)
 
-## Ручной чек-лист
+## Deployment
 
-Проверка в браузере в два окна (два аккаунта: гражданин + коп). Запустить `npm run dev`, открыть два окна `http://localhost:5173`:
+Docker setup with nginx, Let's Encrypt and an admin panel lives in `deploy/` — see [deploy/README.md](deploy/README.md). Client and server must be deployed together (the state schema changes between versions).
 
-1. Регистрация: ввести новый email и пароль (минимум 4 символа) — аккаунт создаётся сразу, без подтверждения почты; открывается экран выбора персонажа.
-2. Создать второго персонажа на том же аккаунте (другой ник и роль) — появляется в списке; прогресс персонажей независим.
-3. Перезаход: закрыть вкладку, снова ввести email+пароль и выбрать прежнего персонажа — наличные, сейф и квартира на месте.
-4. Вход с неверным паролем к существующему email — ошибка «Неверный пароль», в игру не пускает.
-5. Второй одновременный вход того же аккаунта (ещё одно окно с тем же email+паролем) — ошибка «Этот аккаунт уже в игре».
-6. Удаление персонажа: кнопка «Удалить» с подтверждением — персонаж пропадает из списка, прогресс потерян навсегда.
-7. Вход гражданином — спавн у больницы, HUD показывает 500$.
-8. WASD двигает, Shift — бег, персонаж не проходит сквозь здания.
-9. Подойти к машине — подсказка «E — сесть в машину», вход, езда (W/S газ/тормоз, A/D поворот), столкновение со зданием останавливает.
-10. Подъехать к складу (оранжевый маркер) — «E — взять груз», баннер с целью и таймером, доставка в точку → награда от дистанции (60$ + 0.4$ за метр).
-11. Ударить второго игрока кликом — у него отнимается HP; убить → он пропал, респавнился через 3 сек, у убийцы баннер «В РОЗЫСКЕ».
-12. Коп видит красный маркер над розыскным; стоять рядом 3 сек → преступник в тюрьме (баннер с таймером), вышел через 2 мин у участка; коп получил бонус и зарплату (через 5 мин).
-13. У двери квартиры (жёлтый маркер) — «E — аренда 100$», аренда прошла, HUD показывает квартиру; повторно у двери — открывается сейф, депозит/снятие работают.
-14. Убить игрока — он респавнится у больницы (в безопасной зоне), деньги из сейфа не потерял, часть наличных выпала пикапом на месте смерти — любой может подобрать.
-15. Перезапустить сервер, зайти тем же email+паролем и выбрать того же персонажа — наличные, сейф и квартира на месте.
-16. DevTools → Offline 3 сек → Online — оверлей «Соединение потеряно…», игра продолжается без перезахода (прозрачный реконнект, окно 10 сек).
-17. Ударить игрока — видны «−20» над жертвой и анимация замаха; у второго игрока над головой полоска HP; зажать ПКМ — прицел по центру.
-18. Купить биту — в руке коричневый брусок; выстрел из пистолета — tracer, вспышка у дула, отдача.
-19. Езда на машине: передние колёса поворачивают при A/D, все крутятся; наезд на игрока — урон и отброс (+ «−N»), на малой скорости — только толчок; таран — машины разъезжаются.
-20. Въезд в огороженную зону больницы/полиции на машине — разворачивает обратно; внутри зоны удары и выстрелы не наносят урона (обе стороны).
-21. По карте крутятся пикапы с надписями (Бита/Пистолет/Винтовка/Патроны) — подбор касанием, через ~30 сек респаун.
-22. Зомби (зелёные, табличка «Зомби») гоняются и бьют; убитый воскресает на кладбище; розыска за зомби нет; в безопасную зону не заходят.
-23. Открыть магазин/сейф — клики по кнопкам работают сразу (без alt-tab); диалог сам закрывается при отходе.
-24. Устроить розыск при активном грузе — баннеры «В РОЗЫСКЕ» и «Груз → Порт» видны одновременно (две строки).
-25. Миникарта: видна в правом нижнем углу; стрелка поворачивается с игроком; дороги/здания совпадают с городом; POI-точки на местах.
-26. Миникарта: машина, из которой вышел, отмечена жёлтым; если её угнали — метка пропадает.
-27. Миникарта: с грузом цель заказа отмечена красным.
-28. Полная карта: M открывает/закрывает, Esc закрывает; зум колёсиком, пан drag'ом; подписи POI читаются; WASD не работает, пока открыта.
-29. Телефон: P открывает/закрывает; бейдж непрочитанных появляется при входящем SMS (второй клиент шлёт); тост «SMS от …».
-30. SMS: диалоги → тред; отправка доходит второму клиенту; история переживает перезаход; офлайн-игрок получает при входе (бейдж).
-31. Банк: перевод второму клиенту — у обоих обновляются наличные; перевод офлайн-нику зачисляется при его входе; нехватка средств — тост ошибки.
-32. Работа: пешком «Взять заказ» — тост «Нужно быть в машине»; в машине — заказ назначается, цель на миникарте; сдача у точки платит как раньше; «Отказаться» снимает заказ.
-33. Телефон и карта: открытие одного закрывает другой; пока открыты, клики по canvas игнорируются; закрытие по P/M/Esc возвращает управление.
+## Known limitations
 
-## Известные ограничения MVP (не баги)
+- Zombies don't pathfind around buildings (they slide along walls).
+- See [docs/manual-checklist.md](docs/manual-checklist.md) for the full manual QA checklist.
 
-- Зомби не обходят здания (скользят вдоль стен); патфайндинга нет.
-- Деплой: клиент и сервер выкатывать только вместе (схема состояния меняется между версиями).
-- Аккаунты без email (до обязательной регистрации, PROTOCOL_VERSION=6) больше не входят — жёсткий срез; при первом запуске нового сервера email-аккаунты автоматически переносятся в таблицы accounts/characters.
+## License
+
+[MIT](LICENSE)

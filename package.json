@@ -1,5 +1,13 @@
 {
-  "name": "mmo2game",
+  "name": "mmo-city",
+  "version": "1.0.0",
+  "description": "Browser-based 3D MMO for 100 players: Three.js client, Colyseus server, SQLite persistence",
+  "author": "smadrom",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smadrom/mmo-city.git"
+  },
   "private": true,
   "type": "module",
   "workspaces": ["shared", "server", "client"],

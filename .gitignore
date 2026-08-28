@@ -1,5 +1,7 @@
 node_modules/
 dist/
 game.db*
+test-*.db
 *.log
 deploy/docker/.env
+.shots/

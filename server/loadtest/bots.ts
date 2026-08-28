@@ -19,7 +19,7 @@ const httpUrl = url.replace(/^ws/, 'http');
 const AVG_TICK_MAX_MS = 100;
 const P99_TICK_MAX_MS = 300;
 
-const PHRASES = ['привет', 'как дела', 'го в порт', 'копы на складе', 'продам биту', 'где магазин?', '++++'];
+const PHRASES = ['hey', 'how is it going', 'go to the port', 'cops at the warehouse', 'selling a bat', 'where is the shop?', '++++'];
 
 interface Healthz { status: string; players: number; uptimeSec: number; rssMb?: number }
 
